@@ -56,7 +56,8 @@ How Phantasm keeps frame cost proportional to what is *visible*, not to world si
 | Sorting | Linear-time radix sort; skips key bytes that don't vary | Done |
 | Off-screen work | Camera culling before sort and upload | Done |
 | World size | Chunk index returns IDs of objects intersecting the camera view | Done |
-| World streaming | Load and unload chunks as the camera moves | Next |
+| Chunk residency | Load nearby game-owned chunks with a per-update budget; release departed chunks | Done |
+| Background loading | Read and prepare chunks without blocking the game loop | Next |
 | CPU cores | Multithreaded sorting, upload, and chunk updates | Planned |
 | Physics | Box2D v3 (MIT; multithreaded, SIMD) behind an engine interface, benchmarked before adoption | Planned |
 | GPU-driven rendering | Culling and sorting on the GPU for multi-million-object scenes | Researching |
@@ -105,7 +106,7 @@ The timings measure visibility lookup only; index construction and rendering are
 
 **Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
 many images they use. **Off-screen culling** happens in `draw_sprite`, before sorting.
-**Next:** chunk streaming for large worlds, then multithreading.
+**Next:** background loading for streamed chunks, then multithreaded world updates.
 
 Run them yourself:
 
@@ -205,6 +206,19 @@ for (const auto visible_id : index.query(
 The game owns the sprites and textures; `ChunkIndex` stores bounds and IDs only. `viewport`
 is the drawable size in pixels, as passed to `visible_world_rect`.
 
+For worlds whose chunks are created on demand, `ChunkStream<T>` holds chunk data near the camera.
+Its loader runs synchronously, so keep the per-update budget small or supply prepared data:
+
+```cpp
+phantasm::ChunkStream<ChunkData> world{256.0F, 1}; // one-chunk prefetch margin
+world.update(camera_view, 2, [](phantasm::ChunkCoord chunk) {
+    return load_chunk(chunk); // game-provided loader
+});
+for (const auto& [coord, data] : world.loaded()) {
+    draw_chunk(coord, data);
+}
+```
+
 ## Demos
 
 Example games live in [phantasm-demo-projects](https://github.com/hacengeloglu-blip/phantasm-demo-projects),
@@ -233,6 +247,7 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | [0005](docs/adr/0005-module-layout.md) | One repo, separate core and isometric libraries |
 | [0006](docs/adr/0006-demos-in-separate-repository.md) | Engine repo is code-only; demos in a separate repo |
 | [0007](docs/adr/0007-chunk-spatial-index.md) | World-space chunk index in the genre-neutral core |
+| [0008](docs/adr/0008-chunk-residency.md) | Bounded, game-owned chunk residency |
 
 ## Roadmap
 
@@ -243,7 +258,8 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 - [x] M4: camera + batched sprites
 - [x] Performance pass 1: benchmarks, texture atlas, radix sort, culling
 - [x] Chunked spatial partitioning for large worlds
-- [ ] Chunk streaming for large worlds
+- [x] Chunk residency with bounded loading for large worlds
+- [ ] Background chunk loading
 - [ ] Physics (Box2D v3) and collision
 - [ ] Multithreaded sort, upload, and world updates
 - [ ] M5: a small playable isometric game ([demos](https://github.com/hacengeloglu-blip/phantasm-demo-projects))
