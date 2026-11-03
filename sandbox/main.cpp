@@ -4,6 +4,7 @@
 #include <phantasm/frame_stats.hpp>
 #include <phantasm/log.hpp>
 #include <phantasm/sprite.hpp>
+#include <phantasm/task_pool.hpp>
 #include <phantasm/texture.hpp>
 
 #include <algorithm>
@@ -57,6 +58,7 @@ struct BenchScenario {
     TextureMode mode;
     float zoom = kOverviewZoom;
     bool indexed = false;
+    bool parallel = false;
 };
 
 constexpr std::array kBenchScenarios{
@@ -73,6 +75,10 @@ constexpr std::array kBenchScenarios{
 constexpr std::array kStaticBenchScenarios{
     BenchScenario{1'000'000, TextureMode::Atlas, kCloseZoom, false},
     BenchScenario{1'000'000, TextureMode::Atlas, kCloseZoom, true},
+};
+constexpr std::array kParallelBenchScenarios{
+    BenchScenario{1'000'000, TextureMode::Atlas, kCloseZoom, false, false},
+    BenchScenario{1'000'000, TextureMode::Atlas, kCloseZoom, false, true},
 };
 constexpr int kBenchWarmupFrames = 30;
 constexpr int kBenchMeasuredFrames = 240;
@@ -115,6 +121,7 @@ struct Options {
     std::size_t slime_count = kDefaultSlimeCount;
     bool bench = false;
     bool static_bench = false;
+    bool parallel_bench = false;
 };
 
 // Runs each scenario for a fixed number of frames with vsync off.
@@ -124,6 +131,7 @@ struct BenchRun {
     std::vector<double> frame_ms;
     std::vector<double> render_cpu_ms;
     std::vector<double> submit_ms;
+    std::vector<double> update_ms;
     std::vector<double> draw_calls;
     std::vector<double> visible;
 };
@@ -144,6 +152,10 @@ public:
           separate_textures_{make_separate_textures()},
           atlas_{phantasm::build_atlas(renderer(), variant_views())} {
         static_bench_ = options.static_bench;
+        parallel_bench_ = options.parallel_bench;
+        if (parallel_bench_) {
+            tasks_.emplace(3);
+        }
         if (options.bench) {
             start_bench();
         } else {
@@ -161,11 +173,24 @@ protected:
             handle_interactive_keys();
             update_camera(dt);
         }
+        const auto update_start = std::chrono::steady_clock::now();
         if (!static_bench_) {
-            for (Slime& slime : slimes_) {
-                move_and_bounce(slime, dt);
+            if (parallel_) {
+                tasks_->parallel_for(slimes_.size(), 65'536,
+                                     [&](std::size_t begin, std::size_t end) {
+                                         for (std::size_t i = begin; i < end; ++i) {
+                                             move_and_bounce(slimes_[i], dt);
+                                         }
+                                     });
+            } else {
+                for (Slime& slime : slimes_) {
+                    move_and_bounce(slime, dt);
+                }
             }
         }
+        last_update_ms_ = std::chrono::duration<double, std::milli>(
+                              std::chrono::steady_clock::now() - update_start)
+                              .count();
         if (bench_) {
             advance_bench(delta_seconds * kMsPerSecond);
         } else {
@@ -308,17 +333,20 @@ private:
         bench_.emplace();
         begin_scenario(0);
         phantasm::log_info(
-            "{:>9} | {:>14} | {:>4} | {:>9} | {:>5} | {:>9} | {:>9} | {:>9} | {:>9} | {:>6}",
+            "{:>9} | {:>14} | {:>4} | {:>9} | {:>5} | {:>9} | {:>9} | {:>9} | {:>9} | {:>9} | {:>6}",
             "sprites", "textures", "zoom", "visible", "fps", "frame p50", "frame p99", "submit",
-            "end_frame", "draws");
+            "update", "end_frame", "draws");
     }
 
     void begin_scenario(std::size_t index) {
-        const auto& scenario = static_bench_ ? kStaticBenchScenarios[index] : kBenchScenarios[index];
+        const auto& scenario = static_bench_ ? kStaticBenchScenarios[index]
+                                : parallel_bench_ ? kParallelBenchScenarios[index]
+                                                  : kBenchScenarios[index];
         mode_ = scenario.mode;
         indexed_ = scenario.indexed;
+        parallel_ = scenario.parallel;
         renderer().set_camera({.zoom = scenario.zoom});
-        if (static_bench_) {
+        if (static_bench_ || parallel_bench_) {
             rng_.seed(12345);
         }
         spawn_slimes(scenario.sprites);
@@ -338,6 +366,7 @@ private:
             run.frame_ms.push_back(frame_ms);
             run.render_cpu_ms.push_back(stats.cpu_ms);
             run.submit_ms.push_back(stats.submit_ms);
+            run.update_ms.push_back(last_update_ms_);
             run.draw_calls.push_back(static_cast<double>(stats.draw_calls));
             run.visible.push_back(static_cast<double>(stats.sprites));
         }
@@ -348,19 +377,25 @@ private:
         const auto frame = phantasm::summarize(run.frame_ms);
         const auto render = phantasm::summarize(run.render_cpu_ms);
         const auto submit = phantasm::summarize(run.submit_ms);
+        const auto update = phantasm::summarize(run.update_ms);
         const auto draws = phantasm::summarize(run.draw_calls);
         const auto visible = phantasm::summarize(run.visible);
         phantasm::log_info(
             "{:>9} | {:>14} | {:>4.1f} | {:>9.0f} | {:>5.0f} | {:>6.2f} ms | {:>6.2f} ms | "
-            "{:>6.2f} ms | {:>6.2f} ms | {:>6.0f}",
+            "{:>6.2f} ms | {:>6.2f} ms | {:>6.2f} ms | {:>6.0f}",
             slimes_.size(),
-            static_bench_ ? (indexed_ ? "chunk index" : "linear scan") : mode_name(mode_),
+            static_bench_ ? (indexed_ ? "chunk index" : "linear scan")
+                          : parallel_bench_ ? (parallel_ ? "parallel" : "sequential")
+                                            : mode_name(mode_),
             renderer().camera().zoom, visible.mean,
-            kMsPerSecond / frame.mean, frame.p50, frame.p99, submit.mean, render.mean,
+            kMsPerSecond / frame.mean, frame.p50, frame.p99, submit.mean, update.mean,
+            render.mean,
             draws.mean);
 
         if (++run.scenario >=
-            (static_bench_ ? kStaticBenchScenarios.size() : kBenchScenarios.size())) {
+            (static_bench_ ? kStaticBenchScenarios.size()
+                           : parallel_bench_ ? kParallelBenchScenarios.size()
+                                             : kBenchScenarios.size())) {
             request_quit();
             return;
         }
@@ -399,8 +434,12 @@ private:
     TextureMode mode_ = TextureMode::Single;
     std::optional<BenchRun> bench_;
     bool static_bench_ = false;
+    bool parallel_bench_ = false;
     bool indexed_ = false;
+    bool parallel_ = false;
     phantasm::ChunkIndex index_{256.0F};
+    std::optional<phantasm::TaskPool> tasks_;
+    double last_update_ms_ = 0.0;
     std::vector<Slime> slimes_;
     std::mt19937 rng_{12345};
     std::size_t color_index_ = 0;
@@ -420,6 +459,11 @@ Options parse_options(std::span<char*> args) {
             options.static_bench = true;
             continue;
         }
+        if (arg == "--bench-parallel") {
+            options.bench = true;
+            options.parallel_bench = true;
+            continue;
+        }
         std::size_t count = 0;
         const auto [end, error] = std::from_chars(arg.data(), arg.data() + arg.size(), count);
         if (error != std::errc{} || end != arg.data() + arg.size()) {
@@ -433,9 +477,9 @@ Options parse_options(std::span<char*> args) {
 
 } // namespace
 
-// Usage: sandbox [slime_count] [--bench | --bench-static]
+// Usage: sandbox [slime_count] [--bench | --bench-static | --bench-parallel]
 // WASD/arrows pan, Q/E zoom, 1/2/3 = 1k/10k/100k slimes, T cycles texture mode,
-// Space cycles background. --bench and --bench-static run fixed scenarios with vsync off.
+// Space cycles background. Benchmark modes run fixed scenarios with vsync off.
 int main(int argc, char** argv) {
     try {
         const std::span<char*> args{argv, static_cast<std::size_t>(argc)};

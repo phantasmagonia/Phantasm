@@ -2,6 +2,7 @@ add_executable(phantasm_benchmarks
     chunk_index_bench.cpp
     iso_bench.cpp
     sprite_batch_bench.cpp
+    world_update_bench.cpp
 )
 target_link_libraries(phantasm_benchmarks
     PRIVATE phantasm_iso benchmark::benchmark_main phantasm_warnings

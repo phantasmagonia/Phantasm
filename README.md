@@ -38,8 +38,8 @@ Each step was measured before and after on a MacBook Air (M1, 8 GB RAM), release
 
 > **About the hardware:** all numbers come from an entry-level, fanless MacBook Air
 > (M1, 8 GB RAM), which can throttle under sustained load. Faster CPUs and GPUs should
-> produce better results: the CPU-side costs (sorting, culling, submission) scale with
-> single-core speed, and future multithreading will use the extra cores on larger machines.
+> produce better results: sorting, culling, and submission still depend mostly on single-core
+> speed, while independent world updates can use more CPU cores.
 > If you run the benchmarks on other hardware, results are welcome in an issue.
 
 | Optimization | What it does | Measured effect |
@@ -49,6 +49,7 @@ Each step was measured before and after on a MacBook Air (M1, 8 GB RAM), release
 | **Radix sort** | Stable LSD radix sort on a packed 64-bit key (layer, depth, texture) instead of a comparison sort | 100k sprites: **9.1 → 1.3 ms (7.1x)**; 1M: **104 → 24.7 ms** |
 | **Off-screen culling** | Sprites outside the camera view are dropped before sorting and upload | 1M-sprite world viewed up close: sort/upload **31.3 → 0.43 ms** |
 | **Chunk index** | Games query world-space chunks before submitting sprites; bucket-local bounds avoid extra lookups | Static 1M-sprite world, 27,838 visible: submit **15.68 → 6.85 ms (2.3x)** |
+| **Parallel world updates** | A reusable worker pool updates independent object ranges | 1M lightweight objects: **1.00 → 0.33 ms (3.0x)** CPU-only; moving sandbox world: **1.90 → 1.69 ms** median update CPU |
 
 ## Scalability
 
@@ -62,7 +63,8 @@ How Phantasm keeps frame cost proportional to what is *visible*, not to world si
 | World size | Chunk index returns IDs of objects intersecting the camera view | Done |
 | Chunk residency | Load nearby game-owned chunks with a per-update budget; release departed chunks | Done |
 | Background loading | One worker loads game-owned chunk data; completed chunks join the world on the game thread | Done |
-| CPU cores | Multithreaded sorting, upload, and chunk updates | Planned |
+| CPU cores | Fixed worker pool for independent world-update ranges | Done |
+| Render preparation | Multithreaded sorting and upload preparation | Planned |
 | Physics | Box2D v3 (MIT; multithreaded, SIMD) behind an engine interface, benchmarked before adoption | Planned |
 | GPU-driven rendering | Culling and sorting on the GPU for multi-million-object scenes | Researching |
 
@@ -118,6 +120,21 @@ worker. Chunk generation is CPU-only; this benchmark does not measure disk I/O.
 These are observed ranges for this procedural scene. Whole-frame p99 varied between 16 and
 18 ms in both modes, so this run does not establish a general frame-rate gain.
 
+**Moving-world update comparison** (`sandbox --bench-parallel`, vsync off): one million moving
+sprites in an atlas, zoom 4.0, around 27,850 visible. Three paired runs of 240 measured frames
+after 30 warmup frames on the MacBook Air M1 (8 GB). Parallel mode uses three worker threads
+plus the game thread with 65,536-object ranges.
+
+| Update mode | Update CPU mean across runs | Submit CPU mean across runs |
+|---|---:|---:|
+| Sequential | 1.87–1.91 ms (median 1.90) | 14.93–15.31 ms |
+| Parallel | 1.62–1.73 ms (median 1.69) | 14.58–15.09 ms |
+
+The update loop improved by **1.12x** at the median; frame rate stayed around 28–30 FPS in
+both modes. The separate CPU-only `BM_SequentialWorldUpdate` / `BM_ParallelWorldUpdate`
+benchmark uses 16-byte objects and excludes rendering: one million objects measured
+**1.00 → 0.33 ms (3.0x)** with the same three-worker pool.
+
 **Chunk query microbenchmark** (MacBook Air M1, 8 GB, release): a regular grid of 16×16
 objects at 32-unit spacing, 256-unit chunks, and a 1,024×1,024 view containing 1,024 objects.
 The timings measure visibility lookup only; index construction and rendering are excluded.
@@ -142,7 +159,7 @@ MacBook Air M1 (8 GB); the GPU comparison above includes submission and sorting.
 
 **Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
 many images they use. **Off-screen culling** happens in `draw_sprite`, before sorting.
-**Next:** multithreaded world updates and profiling streamed worlds end to end.
+**Next:** multithreaded render preparation and physics.
 
 Run them yourself:
 
@@ -151,6 +168,7 @@ cmake --preset release && cmake --build --preset release
 ./build/release/bin/phantasm_benchmarks     # CPU microbenchmarks (Google Benchmark)
 ./build/release/bin/sandbox --bench         # GPU end-to-end, vsync off
 ./build/release/bin/sandbox --bench-static  # static world: linear vs chunk index
+./build/release/bin/sandbox --bench-parallel # moving world: sequential vs parallel updates
 ./build/release/bin/phantasm_stream_bench              # synchronous chunk generation
 ./build/release/bin/phantasm_stream_bench --background # background chunk generation
 ```
@@ -174,6 +192,8 @@ Implemented and tested:
   tile picking, draw-depth helpers.
 
 - **World visibility:** chunk index, bounded chunk residency, and background chunk loading.
+- **World updates:** reusable task pool for independent ranges, with worker errors returned
+  to the caller.
 - **Benchmarks:** Google Benchmark microbenchmarks plus end-to-end GPU benchmark modes.
 
 Planned: physics, isometric tilemaps, wall cutaway, line of sight, lighting,
@@ -305,6 +325,7 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | [0008](docs/adr/0008-chunk-residency.md) | Bounded, game-owned chunk residency |
 | [0009](docs/adr/0009-background-chunk-loading.md) | Background chunk loading with main-thread publication |
 | [0010](docs/adr/0010-gplv3-only-license.md) | GPLv3-only licensing for future Phantasm versions |
+| [0011](docs/adr/0011-task-pool-for-world-updates.md) | Fixed worker pool for independent world updates |
 
 ## Roadmap
 
@@ -317,8 +338,9 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 - [x] Chunked spatial partitioning for large worlds
 - [x] Chunk residency with bounded loading for large worlds
 - [x] Background chunk loading
+- [x] Parallel world-update ranges
 - [ ] Physics (Box2D v3) and collision
-- [ ] Multithreaded sort, upload, and world updates
+- [ ] Multithreaded sorting and upload preparation
 - [ ] M5: a small playable isometric game ([demos](https://github.com/phantasmagonia/phantasm-demo-projects))
 - [ ] CI on macOS, Windows, and Linux; Direct3D 12 backend
 - [ ] v0.1 release
