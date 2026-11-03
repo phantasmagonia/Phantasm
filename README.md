@@ -32,6 +32,12 @@ multi-level worlds. Built on SDL3 and SDL_GPU, MIT-licensed.
 
 Each step was measured before and after on a MacBook Air (M1, 8 GB RAM), release build.
 
+> **About the hardware:** all numbers come from an entry-level, fanless MacBook Air
+> (M1, 8 GB RAM), which can throttle under sustained load. Faster CPUs and GPUs should
+> produce better results: the CPU-side costs (sorting, culling, submission) scale with
+> single-core speed, and future multithreading will use the extra cores on larger machines.
+> If you run the benchmarks on other hardware, results are welcome in an issue.
+
 | Optimization | What it does | Measured effect |
 |---|---|---|
 | **Instanced batching** | Sprites become per-instance data in one GPU buffer; the GPU builds quads from the vertex index | 1,000,000 sprites in **1 draw call** |
@@ -55,8 +61,9 @@ How Phantasm keeps frame cost proportional to what is *visible*, not to world si
 
 ## Performance
 
-All numbers: **MacBook Air (M1, 8 GB RAM)**, release build. Run the benchmarks yourself with
-the commands below.
+All numbers: **MacBook Air (M1, 8 GB RAM)**, release build; expect better results on faster
+hardware (see the note under [Optimization work](#optimization-work)). Run the benchmarks
+yourself with the commands below.
 
 **End-to-end** (`sandbox --bench`, vsync off, 240 measured frames).
 *Submit* = the game's `draw_sprite` calls + culling + `end_frame`; *end_frame* = sort, upload,
