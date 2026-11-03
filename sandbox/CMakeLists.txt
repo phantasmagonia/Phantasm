@@ -1,2 +1,5 @@
 add_executable(sandbox main.cpp)
 target_link_libraries(sandbox PRIVATE phantasm phantasm_warnings)
+
+add_executable(phantasm_stream_bench stream_bench.cpp)
+target_link_libraries(phantasm_stream_bench PRIVATE phantasm phantasm_warnings)

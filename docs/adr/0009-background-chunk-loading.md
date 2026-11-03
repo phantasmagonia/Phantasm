@@ -24,5 +24,6 @@ game-thread-only state. Destruction joins the worker and may wait for an active 
 ## Consequences
 
 The game loop does not run the loader during normal updates. The API owns one worker
-per stream, not a general thread pool. CPU and memory costs of constructing, publishing, and
-rendering streamed worlds still need end-to-end measurements.
+per stream, not a general thread pool. The procedural streamed-world GPU benchmark now measures
+the synchronous and background paths together with rendering. Disk I/O, memory peaks, and
+game-specific chunk preparation still need separate measurements.

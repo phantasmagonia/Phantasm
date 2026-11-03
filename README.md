@@ -102,6 +102,21 @@ is outside the measured frames. *Submit* includes visibility lookup, sprite subm
 On this MacBook Air M1 (8 GB), indexed submission reduced CPU submit time by **2.3x**. FPS
 was 31 for the scan and 33 for the index; macOS compositor timing also affects those figures.
 
+**Streamed-world GPU comparison** (`phantasm_stream_bench`, vsync off): procedural 256-unit
+chunks with 8,192 sprites each; one-chunk prefetch margin; camera advances 32 units per frame.
+Three paired runs of 240 measured frames after 30 warmup frames on the MacBook Air M1 (8 GB).
+Both modes completed 148 chunk loads and averaged 7,609 visible sprites. The synchronous mode
+loads up to two chunks per frame; background mode allows four outstanding requests and uses one
+worker. Chunk generation is CPU-only; this benchmark does not measure disk I/O.
+
+| Loading mode | Submit CPU mean | Submit CPU p99 | Resident chunks, mean |
+|---|---:|---:|---:|
+| Synchronous | 0.77 ms in all three runs | 0.97–0.99 ms | 16.2 |
+| Background | 0.64–0.74 ms | 0.85–0.95 ms | 16.0 |
+
+These are observed ranges for this procedural scene. Whole-frame p99 varied between 16 and
+18 ms in both modes, so this run does not establish a general frame-rate gain.
+
 **Chunk query microbenchmark** (MacBook Air M1, 8 GB, release): a regular grid of 16×16
 objects at 32-unit spacing, 256-unit chunks, and a 1,024×1,024 view containing 1,024 objects.
 The timings measure visibility lookup only; index construction and rendering are excluded.
@@ -135,6 +150,8 @@ cmake --preset release && cmake --build --preset release
 ./build/release/bin/phantasm_benchmarks     # CPU microbenchmarks (Google Benchmark)
 ./build/release/bin/sandbox --bench         # GPU end-to-end, vsync off
 ./build/release/bin/sandbox --bench-static  # static world: linear vs chunk index
+./build/release/bin/phantasm_stream_bench              # synchronous chunk generation
+./build/release/bin/phantasm_stream_bench --background # background chunk generation
 ```
 
 Close other apps first; background load skews results.
@@ -254,7 +271,7 @@ for (const auto& [coord, data] : world.loaded()) {
 The loader must be thread-safe and cannot create SDL_GPU resources. Check
 `take_failures()` for load errors and call `retry(coord)` when a retry is appropriate.
 The stream waits for an active load when destroyed; loaders should finish or support their own
-cancellation. No end-to-end streaming frame benchmark has been recorded yet.
+cancellation. The procedural GPU benchmark above exercises both loading paths.
 
 ## Demos
 
