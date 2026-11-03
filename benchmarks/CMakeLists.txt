@@ -1,4 +1,5 @@
 add_executable(phantasm_benchmarks
+    chunk_index_bench.cpp
     iso_bench.cpp
     sprite_batch_bench.cpp
 )

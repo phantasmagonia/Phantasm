@@ -44,6 +44,7 @@ Each step was measured before and after on a MacBook Air (M1, 8 GB RAM), release
 | **Texture atlas** | Packs many images into one texture (stb_rect_pack) so depth sorting can't break batches | 100k sprites over 16 images: **93,664 → 1 draw call**, render CPU **28.5 → 9.3 ms** |
 | **Radix sort** | Stable LSD radix sort on a packed 64-bit key (layer, depth, texture) instead of a comparison sort | 100k sprites: **9.1 → 1.3 ms (7.1x)**; 1M: **104 → 24.7 ms** |
 | **Off-screen culling** | Sprites outside the camera view are dropped before sorting and upload | 1M-sprite world viewed up close: sort/upload **31.3 → 0.43 ms** |
+| **Chunk index** | Games query world-space chunks before submitting sprites | 1,048,576 objects, 1,024 visible: visibility query **1.40 → 0.041 ms (34x)** |
 
 ## Scalability
 
@@ -54,7 +55,8 @@ How Phantasm keeps frame cost proportional to what is *visible*, not to world si
 | Draw calls | Instancing + atlases: one draw per texture run, usually one per scene | Done |
 | Sorting | Linear-time radix sort; skips key bytes that don't vary | Done |
 | Off-screen work | Camera culling before sort and upload | Done |
-| World size | Chunked spatial partitioning so games only submit chunks the camera sees; chunk streaming for huge maps | Next |
+| World size | Chunk index returns IDs of objects intersecting the camera view | Done |
+| World streaming | Load and unload chunks as the camera moves | Next |
 | CPU cores | Multithreaded sorting, upload, and chunk updates | Planned |
 | Physics | Box2D v3 (MIT; multithreaded, SIMD) behind an engine interface, benchmarked before adoption | Planned |
 | GPU-driven rendering | Culling and sorting on the GPU for multi-million-object scenes | Researching |
@@ -79,9 +81,19 @@ macOS compositor effects.
 | 100,000 | 16 in one atlas | 0.5 | 100,000 | 191 | 2.57 ms | 1.78 ms | 1 |
 | 1,000,000 | 16 in one atlas | 4.0 | 27,850 | 31 | 14.6 ms | 0.43 ms | 1 |
 
-The last row is a large world viewed up close: culling leaves ~3% of sprites, and the engine's
-sort/upload cost drops to 0.43 ms. What remains is the game submitting a million objects per
-frame, which spatial partitioning (chunks) will remove.
+The last row predates the chunk index: culling leaves ~3% of sprites, and the engine's
+sort/upload cost drops to 0.43 ms. Its submit time still includes visiting a million objects.
+Games can now query `ChunkIndex` before submission; the end-to-end sandbox has not yet been
+rewired or remeasured with that path.
+
+**Chunk query microbenchmark** (MacBook Air M1, 8 GB, release): a regular grid of 16×16
+objects at 32-unit spacing, 256-unit chunks, and a 1,024×1,024 view containing 1,024 objects.
+The timings measure visibility lookup only; index construction and rendering are excluded.
+
+| World objects | Linear scan | Chunk query | Speed-up |
+|---:|---:|---:|---:|
+| 102,400 | 0.140 ms | 0.047 ms | 3.0x |
+| 1,048,576 | 1.40 ms | 0.041 ms | 34x |
 
 **CPU microbenchmarks** (`phantasm_benchmarks`), sorting + grouping, random depth:
 
@@ -93,7 +105,7 @@ frame, which spatial partitioning (chunks) will remove.
 
 **Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
 many images they use. **Off-screen culling** happens in `draw_sprite`, before sorting.
-**Next:** chunked spatial partitioning for large worlds, then multithreading.
+**Next:** chunk streaming for large worlds, then multithreading.
 
 Run them yourself:
 
@@ -177,6 +189,22 @@ int main() {
 }
 ```
 
+For a large world, keep objects in game-owned storage and index their world bounds. Update the
+index when an object moves, then submit only IDs returned for the camera view:
+
+```cpp
+phantasm::ChunkIndex index{256.0F};
+index.upsert(id, phantasm::sprite_world_rect(sprites[id]));
+
+for (const auto visible_id : index.query(
+         phantasm::visible_world_rect(renderer.camera(), viewport))) {
+    renderer.draw_sprite(textures[visible_id], sprites[visible_id]);
+}
+```
+
+The game owns the sprites and textures; `ChunkIndex` stores bounds and IDs only. `viewport`
+is the drawable size in pixels, as passed to `visible_world_rect`.
+
 ## Demos
 
 Example games live in [phantasm-demo-projects](https://github.com/hacengeloglu-blip/phantasm-demo-projects),
@@ -204,6 +232,7 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | [0004](docs/adr/0004-isometric-first-general-core.md) | Isometric-first, genre-neutral core |
 | [0005](docs/adr/0005-module-layout.md) | One repo, separate core and isometric libraries |
 | [0006](docs/adr/0006-demos-in-separate-repository.md) | Engine repo is code-only; demos in a separate repo |
+| [0007](docs/adr/0007-chunk-spatial-index.md) | World-space chunk index in the genre-neutral core |
 
 ## Roadmap
 
@@ -213,7 +242,8 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 - [x] M3: textured sprite
 - [x] M4: camera + batched sprites
 - [x] Performance pass 1: benchmarks, texture atlas, radix sort, culling
-- [ ] Chunked spatial partitioning and streaming for large worlds
+- [x] Chunked spatial partitioning for large worlds
+- [ ] Chunk streaming for large worlds
 - [ ] Physics (Box2D v3) and collision
 - [ ] Multithreaded sort, upload, and world updates
 - [ ] M5: a small playable isometric game ([demos](https://github.com/hacengeloglu-blip/phantasm-demo-projects))

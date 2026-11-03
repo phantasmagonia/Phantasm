@@ -2,6 +2,7 @@ add_library(phantasm
     src/application.cpp
     src/atlas.cpp
     src/camera.cpp
+    src/chunk_index.cpp
     src/frame_clock.cpp
     src/frame_stats.cpp
     src/geometry.cpp
