@@ -5,15 +5,15 @@ isometric games.** Genre-neutral at its heart, with an optional isometric layer 
 multi-level worlds. Built on SDL3 and SDL_GPU, licensed under GPLv3 only.
 
 > **Status:** early development (pre-0.1). The core renderer and isometric math work and are
-> tested; gameplay systems (physics, tilemaps, audio, editor) are on the roadmap. Developed and
-> measured on macOS (Metal). Windows and Linux (Vulkan) are targets but not yet tested in CI.
+> tested; physics, audio, and an editor are not implemented. Development and measurements have
+> been on macOS (Metal). Windows and Linux (Vulkan) are targets but not yet tested in CI.
 
 > **AI use:** AI tools have been used to help design, write, test, and document Phantasm, and
 > will continue to be used. Build, test, and benchmark results are reported only when verified.
 
 **Contents:** [Why Phantasm](#why-phantasm) · [Optimization work](#optimization-work) ·
 [Scalability](#scalability) · [Performance](#performance) · [Features](#features) ·
-[Build](#build) · [Example](#minimal-example) · [Roadmap](#roadmap) · [License](#license)
+[Build](#build) · [Example](#minimal-example) · [License](#license)
 
 ## Why Phantasm
 
@@ -22,7 +22,7 @@ multi-level worlds. Built on SDL3 and SDL_GPU, licensed under GPLv3 only.
   before/after numbers in its commit message.
 - **Built for large isometric worlds.** Depth-sorted rendering that stays batched, floor
   levels, tile picking, and off-screen culling are in the core design, not bolted on later.
-- **Modern GPU path.** SDL_GPU on native backends (Metal, Vulkan; Direct3D 12 planned),
+- **Modern GPU path.** SDL_GPU on native backends (Metal and Vulkan),
   instanced rendering, shaders compiled ahead of time with no runtime shader compiler.
 - **Small, readable C++20.** RAII ownership everywhere, warnings-as-errors, no hidden global
   state in the public API, and a test suite written alongside the code.
@@ -55,18 +55,15 @@ Each step was measured before and after on a MacBook Air (M1, 8 GB RAM), release
 
 How Phantasm keeps frame cost proportional to what is *visible*, not to world size:
 
-| Layer | Approach | Status |
-|---|---|---|
-| Draw calls | Instancing + atlases: one draw per texture run, usually one per scene | Done |
-| Sorting | Linear-time radix sort; skips key bytes that don't vary | Done |
-| Off-screen work | Camera culling before sort and upload | Done |
-| World size | Chunk index returns IDs of objects intersecting the camera view | Done |
-| Chunk residency | Load nearby game-owned chunks with a per-update budget; release departed chunks | Done |
-| Background loading | One worker loads game-owned chunk data; completed chunks join the world on the game thread | Done |
-| CPU cores | Fixed worker pool for independent world-update ranges | Done |
-| Render preparation | Multithreaded sorting and upload preparation | Planned |
-| Physics | Box2D v3 (MIT; multithreaded, SIMD) behind an engine interface, benchmarked before adoption | Planned |
-| GPU-driven rendering | Culling and sorting on the GPU for multi-million-object scenes | Researching |
+| Layer | Current approach |
+|---|---|
+| Draw calls | Instancing + atlases: one draw per texture run, usually one per scene |
+| Sorting | Linear-time radix sort; skips key bytes that don't vary |
+| Off-screen work | Camera culling before sort and upload |
+| World size | Chunk index returns IDs of objects intersecting the camera view |
+| Chunk residency | Load nearby game-owned chunks with a per-update budget; release departed chunks |
+| Background loading | One worker loads game-owned chunk data; completed chunks join the world on the game thread |
+| CPU cores | Fixed worker pool for independent world-update ranges |
 
 ## Performance
 
@@ -159,7 +156,6 @@ MacBook Air M1 (8 GB); the GPU comparison above includes submission and sorting.
 
 **Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
 many images they use. **Off-screen culling** happens in `draw_sprite`, before sorting.
-**Next:** multithreaded render preparation and physics.
 
 Run them yourself:
 
@@ -195,9 +191,6 @@ Implemented and tested:
 - **World updates:** reusable task pool for independent ranges, with worker errors returned
   to the caller.
 - **Benchmarks:** Google Benchmark microbenchmarks plus end-to-end GPU benchmark modes.
-
-Planned: physics, isometric tilemaps, wall cutaway, line of sight, lighting,
-animation, audio, an editor (Dear ImGui), and Direct3D 12. See [Roadmap](#roadmap).
 
 ## Build
 
@@ -309,48 +302,14 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | `sandbox/` | Demo and stress test for the core |
 | `tests/` | Catch2 unit tests |
 | `benchmarks/` | Google Benchmark microbenchmarks for hot paths |
-| `docs/adr/` | Architecture decision records |
-
-## Architecture decisions
-
-| ADR | Decision |
-|---|---|
-| [0001](docs/adr/0001-graphics-api-sdl-gpu.md) | SDL_GPU as the graphics API |
-| [0002](docs/adr/0002-shader-pipeline.md) | GLSL → SPIR-V / MSL at build time |
-| [0003](docs/adr/0003-image-loading-stb.md) | stb_image for image decoding |
-| [0004](docs/adr/0004-isometric-first-general-core.md) | Isometric-first, genre-neutral core |
-| [0005](docs/adr/0005-module-layout.md) | One repo, separate core and isometric libraries |
-| [0006](docs/adr/0006-demos-in-separate-repository.md) | Engine repo is code-only; demos in a separate repo |
-| [0007](docs/adr/0007-chunk-spatial-index.md) | World-space chunk index in the genre-neutral core |
-| [0008](docs/adr/0008-chunk-residency.md) | Bounded, game-owned chunk residency |
-| [0009](docs/adr/0009-background-chunk-loading.md) | Background chunk loading with main-thread publication |
-| [0010](docs/adr/0010-gplv3-only-license.md) | GPLv3-only licensing for future Phantasm versions |
-| [0011](docs/adr/0011-task-pool-for-world-updates.md) | Fixed worker pool for independent world updates |
-
-## Roadmap
-
-- [x] M0: toolchain, CMake, tests
-- [x] M1: window, loop, input
-- [x] M2: SDL_GPU clear screen
-- [x] M3: textured sprite
-- [x] M4: camera + batched sprites
-- [x] Performance pass 1: benchmarks, texture atlas, radix sort, culling
-- [x] Chunked spatial partitioning for large worlds
-- [x] Chunk residency with bounded loading for large worlds
-- [x] Background chunk loading
-- [x] Parallel world-update ranges
-- [ ] Physics (Box2D v3) and collision
-- [ ] Multithreaded sorting and upload preparation
-- [ ] M5: a small playable isometric game ([demos](https://github.com/phantasmagonia/phantasm-demo-projects))
-- [ ] CI on macOS, Windows, and Linux; Direct3D 12 backend
-- [ ] v0.1 release
 
 ## License
 
-Copyright (c) 2026 Cengel. Phantasm's project-owned code and documentation are licensed under the
-[GNU General Public License, version 3 only](LICENSE) (`GPL-3.0-only`), with no game-linking
-exception. If you distribute a game linked to Phantasm, the combined program generally must
-be available under GPLv3 terms. Private development does not require publishing your game.
+Copyright (c) 2026 Halil Ahmet Çengeloğlu. Phantasm's project-owned code and documentation are
+licensed under the [GNU General Public License, version 3 only](LICENSE) (`GPL-3.0-only`),
+with no game-linking exception. If you distribute a game linked to Phantasm, the combined
+program generally must be available under GPLv3 terms. Private development does not require
+publishing your game.
 
 GPLv3 **allows companies to use and sell** the engine under its terms; it does not reserve
 engine sales to the author. Copies of earlier Phantasm versions obtained under the MIT license
