@@ -1,12 +1,13 @@
 #pragma once
 
+#include <phantasm/color.hpp>
 #include <phantasm/input.hpp>
+#include <phantasm/renderer.hpp>
 #include <phantasm/window.hpp>
 
 namespace phantasm {
 
 namespace detail {
-// Initializes SDL on construction and shuts it down on destruction (RAII).
 class SdlContext {
 public:
     SdlContext();
@@ -18,7 +19,6 @@ public:
 };
 } // namespace detail
 
-// Base class for a game. Derive from it, override on_update, call run().
 class Application {
 public:
     explicit Application(const WindowConfig& config = {});
@@ -29,25 +29,26 @@ public:
     Application(Application&&) = delete;
     Application& operator=(Application&&) = delete;
 
-    // Runs the main loop until the window closes or request_quit() is called.
     void run();
     void request_quit() noexcept;
 
 protected:
-    // Called once per frame with the seconds elapsed since the last frame.
     virtual void on_update(double delta_seconds) = 0;
 
     [[nodiscard]] const Input& input() const noexcept { return input_; }
 
+    void set_clear_color(Color color) noexcept { clear_color_ = color; }
+
 private:
     void pump_events();
 
-    // ORDER MATTERS: members are constructed top-to-bottom and destroyed
-    // bottom-to-top. SDL must be initialized before the window exists and
-    // shut down only after the window is gone.
+    // Declaration order is construction order (destruction is reverse):
+    // SDL must outlive the window, and the window must outlive the renderer.
     detail::SdlContext sdl_;
     Window window_;
+    Renderer renderer_;
     Input input_;
+    Color clear_color_{0.1F, 0.1F, 0.12F, 1.0F};
     bool running_ = false;
 };
 

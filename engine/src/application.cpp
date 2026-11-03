@@ -28,8 +28,8 @@ SdlContext::~SdlContext() {
 
 namespace {
 
-// SDL scancodes and phantasm::Key share USB HID values; reject anything
-// outside our table instead of indexing out of bounds.
+constexpr Uint32 kIdleSleepMs = 16;
+
 bool to_key(SDL_Scancode scancode, Key& out) noexcept {
     const auto index = static_cast<std::size_t>(scancode);
     if (index >= kKeyCount) {
@@ -41,7 +41,7 @@ bool to_key(SDL_Scancode scancode, Key& out) noexcept {
 
 } // namespace
 
-Application::Application(const WindowConfig& config) : window_{config} {}
+Application::Application(const WindowConfig& config) : window_{config}, renderer_{window_} {}
 
 void Application::run() {
     running_ = true;
@@ -52,9 +52,10 @@ void Application::run() {
         pump_events();
         on_update(clock.tick(SDL_GetTicksNS()));
 
-        // Nothing is rendered yet, so nothing waits for vsync and the loop
-        // would spin at 100% CPU. Remove once SDL_GPU presents frames (M2).
-        SDL_Delay(1);
+        // No vsync wait when nothing is presented; avoid spinning the CPU.
+        if (!renderer_.draw_frame(clear_color_)) {
+            SDL_Delay(kIdleSleepMs);
+        }
     }
 }
 
