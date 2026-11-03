@@ -38,3 +38,20 @@ TEST_CASE("A degenerate viewport or zoom produces a zero transform") {
     CHECK(phantasm::apply(clip, Vec2{123, 456}).x == 0.0F);
     CHECK(phantasm::camera_to_clip(Camera{}, Vec2{0, 0}).scale.x == 0.0F);
 }
+
+TEST_CASE("The visible world rect is centered on the camera and shrinks with zoom") {
+    const auto view = phantasm::visible_world_rect(Camera{.position = {100, 50}, .zoom = 2.0F},
+                                                   kViewport);
+
+    CHECK(view.x == Catch::Approx(-100.0F));
+    CHECK(view.y == Catch::Approx(-100.0F));
+    CHECK(view.w == Catch::Approx(400.0F));
+    CHECK(view.h == Catch::Approx(300.0F));
+}
+
+TEST_CASE("A non-positive zoom yields an empty visible rect") {
+    const auto view = phantasm::visible_world_rect(Camera{.zoom = 0.0F}, kViewport);
+
+    CHECK(view.w == 0.0F);
+    CHECK(view.h == 0.0F);
+}

@@ -30,18 +30,23 @@ chunk streaming, an editor (Dear ImGui), and Direct3D 12 support. See [Roadmap](
 Performance is a first-class goal. Every number here comes from the committed benchmarks
 and states its hardware. Baseline on a **MacBook Air (M1, 8 GB RAM)**, release build:
 
-**End-to-end** (`sandbox --bench`, vsync off, 240 measured frames). *Render CPU* is the
-engine's per-frame cost (sort, upload, command recording) and the most reliable number here;
-FPS can be capped by the macOS compositor even with vsync off.
+**End-to-end** (`sandbox --bench`, vsync off, 240 measured frames).
+*Submit* = the game's `draw_sprite` calls + culling + `end_frame`; *end_frame* = sort, upload,
+and command recording. These CPU timings are the reliable numbers; FPS and p99 include
+macOS compositor effects.
 
-| Sprites | Textures | Render CPU | Draw calls | FPS |
-|---:|---|---:|---:|---:|
-| 1,000 | 1 | 0.28 ms | 1 | 120 (capped) |
-| 10,000 | 1 | 0.94 ms | 1 | 120 (capped) |
-| 100,000 | 1 | 2.9 ms | 1 | 120 (capped) |
-| 1,000,000 | 1 | 30.8 ms | 1 | 19 |
-| 100,000 | 16 separate | 19.6 ms | 93,702 | 49 |
-| 100,000 | 16 in one atlas | 3.0 ms | 1 | 120 (capped) |
+| Sprites | Textures | Zoom | Visible | FPS | Submit | end_frame | Draw calls |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 10,000 | 1 | 0.5 | 10,000 | 649 | 0.44 ms | 0.29 ms | 1 |
+| 100,000 | 1 | 0.5 | 100,000 | 185 | 2.65 ms | 1.89 ms | 1 |
+| 1,000,000 | 1 | 0.5 | 1,000,000 | 18 | 38.2 ms | 31.3 ms | 1 |
+| 100,000 | 16 separate | 0.5 | 100,000 | 50 | 19.9 ms | 19.2 ms | 93,699 |
+| 100,000 | 16 in one atlas | 0.5 | 100,000 | 191 | 2.57 ms | 1.78 ms | 1 |
+| 1,000,000 | 16 in one atlas | 4.0 | 27,850 | 31 | 14.6 ms | 0.43 ms | 1 |
+
+The last row is a large world viewed up close: culling leaves ~3% of sprites, and the engine's
+sort/upload cost drops to 0.43 ms. What remains is the game submitting a million objects per
+frame, which spatial partitioning (chunks) will remove.
 
 **CPU microbenchmarks** (`phantasm_benchmarks`), sorting + grouping, random depth:
 
@@ -52,7 +57,8 @@ FPS can be capped by the macOS compositor even with vsync off.
 | 1,000,000 | 104 ms | 24.7 ms | 4.2x |
 
 **Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
-many images they use. **Next:** culling of off-screen sprites, then multithreading.
+many images they use. **Off-screen culling** happens in `draw_sprite`, before sorting.
+**Next:** chunked spatial partitioning for large worlds, then multithreading.
 
 Run them yourself:
 

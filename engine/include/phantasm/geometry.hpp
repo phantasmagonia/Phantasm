@@ -15,4 +15,7 @@ struct Rect {
     float h = 0.0F;
 };
 
+// True if the rects overlap with positive area (touching edges do not count).
+[[nodiscard]] bool intersects(const Rect& a, const Rect& b) noexcept;
+
 } // namespace phantasm

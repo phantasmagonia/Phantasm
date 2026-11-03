@@ -48,16 +48,25 @@ constexpr std::string_view mode_name(TextureMode mode) {
     return "?";
 }
 
+constexpr float kOverviewZoom = 0.5F; // whole world visible
+constexpr float kCloseZoom = 4.0F;     // ~1% of the world visible, like a large map
+
 struct BenchScenario {
     std::size_t sprites;
     TextureMode mode;
+    float zoom = kOverviewZoom;
 };
 
 constexpr std::array kBenchScenarios{
-    BenchScenario{1'000, TextureMode::Single},     BenchScenario{10'000, TextureMode::Single},
-    BenchScenario{100'000, TextureMode::Single},   BenchScenario{1'000'000, TextureMode::Single},
-    BenchScenario{10'000, TextureMode::Separate},  BenchScenario{10'000, TextureMode::Atlas},
-    BenchScenario{100'000, TextureMode::Separate}, BenchScenario{100'000, TextureMode::Atlas},
+    BenchScenario{1'000, TextureMode::Single},
+    BenchScenario{10'000, TextureMode::Single},
+    BenchScenario{100'000, TextureMode::Single},
+    BenchScenario{1'000'000, TextureMode::Single},
+    BenchScenario{10'000, TextureMode::Separate},
+    BenchScenario{10'000, TextureMode::Atlas},
+    BenchScenario{100'000, TextureMode::Separate},
+    BenchScenario{100'000, TextureMode::Atlas},
+    BenchScenario{1'000'000, TextureMode::Atlas, kCloseZoom},
 };
 constexpr int kBenchWarmupFrames = 30;
 constexpr int kBenchMeasuredFrames = 240;
@@ -107,7 +116,9 @@ struct BenchRun {
     int frame = 0;
     std::vector<double> frame_ms;
     std::vector<double> render_cpu_ms;
+    std::vector<double> submit_ms;
     std::vector<double> draw_calls;
+    std::vector<double> visible;
 };
 
 struct Slime {
@@ -273,15 +284,16 @@ private:
             phantasm::log_warn("Vsync could not be disabled; results are capped");
         }
         bench_.emplace();
-        renderer().set_camera({.zoom = 0.5F});
         begin_scenario(0);
-        phantasm::log_info("{:>9} | {:>14} | {:>5} | {:>9} | {:>9} | {:>9} | {:>10} | {:>6}",
-                           "sprites", "textures", "fps", "frame avg", "frame p50", "frame p99",
-                           "render CPU", "draws");
+        phantasm::log_info(
+            "{:>9} | {:>14} | {:>4} | {:>9} | {:>5} | {:>9} | {:>9} | {:>9} | {:>9} | {:>6}",
+            "sprites", "textures", "zoom", "visible", "fps", "frame p50", "frame p99", "submit",
+            "end_frame", "draws");
     }
 
     void begin_scenario(std::size_t index) {
         mode_ = kBenchScenarios[index].mode;
+        renderer().set_camera({.zoom = kBenchScenarios[index].zoom});
         spawn_slimes(kBenchScenarios[index].sprites);
     }
 
@@ -292,7 +304,9 @@ private:
             const auto& stats = renderer().last_stats();
             run.frame_ms.push_back(frame_ms);
             run.render_cpu_ms.push_back(stats.cpu_ms);
+            run.submit_ms.push_back(stats.submit_ms);
             run.draw_calls.push_back(static_cast<double>(stats.draw_calls));
+            run.visible.push_back(static_cast<double>(stats.sprites));
         }
         if (run.frame < kBenchWarmupFrames + kBenchMeasuredFrames) {
             return;
@@ -300,12 +314,15 @@ private:
 
         const auto frame = phantasm::summarize(run.frame_ms);
         const auto render = phantasm::summarize(run.render_cpu_ms);
+        const auto submit = phantasm::summarize(run.submit_ms);
         const auto draws = phantasm::summarize(run.draw_calls);
+        const auto visible = phantasm::summarize(run.visible);
         phantasm::log_info(
-            "{:>9} | {:>14} | {:>5.0f} | {:>6.2f} ms | {:>6.2f} ms | {:>6.2f} ms | {:>7.2f} ms | "
-            "{:>6.0f}",
-            slimes_.size(), mode_name(mode_), kMsPerSecond / frame.mean, frame.mean, frame.p50,
-            frame.p99, render.mean, draws.mean);
+            "{:>9} | {:>14} | {:>4.1f} | {:>9.0f} | {:>5.0f} | {:>6.2f} ms | {:>6.2f} ms | "
+            "{:>6.2f} ms | {:>6.2f} ms | {:>6.0f}",
+            slimes_.size(), mode_name(mode_), renderer().camera().zoom, visible.mean,
+            kMsPerSecond / frame.mean, frame.p50, frame.p99, submit.mean, render.mean,
+            draws.mean);
 
         if (++run.scenario >= kBenchScenarios.size()) {
             request_quit();

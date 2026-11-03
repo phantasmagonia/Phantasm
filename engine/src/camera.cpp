@@ -19,4 +19,14 @@ Vec2 apply(const ClipTransform& transform, Vec2 point) noexcept {
                 point.y * transform.scale.y + transform.offset.y};
 }
 
+Rect visible_world_rect(const Camera& camera, Vec2 viewport) noexcept {
+    if (camera.zoom <= 0.0F) {
+        return {};
+    }
+    const float width = viewport.x / camera.zoom;
+    const float height = viewport.y / camera.zoom;
+    return Rect{camera.position.x - width * 0.5F, camera.position.y - height * 0.5F, width,
+                height};
+}
+
 } // namespace phantasm

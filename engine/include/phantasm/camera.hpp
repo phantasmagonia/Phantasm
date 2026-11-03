@@ -19,4 +19,7 @@ struct ClipTransform {
 [[nodiscard]] ClipTransform camera_to_clip(const Camera& camera, Vec2 viewport) noexcept;
 [[nodiscard]] Vec2 apply(const ClipTransform& transform, Vec2 point) noexcept;
 
+// The part of the world the camera shows, for culling.
+[[nodiscard]] Rect visible_world_rect(const Camera& camera, Vec2 viewport) noexcept;
+
 } // namespace phantasm

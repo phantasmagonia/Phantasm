@@ -27,9 +27,11 @@ namespace phantasm {
 class Window;
 
 struct RenderStats {
-    std::uint32_t sprites = 0;
+    std::uint32_t sprites = 0; // drawn, after culling
+    std::uint32_t culled = 0;  // skipped because they were outside the camera view
     std::uint32_t draw_calls = 0;
-    double cpu_ms = 0.0; // sort + upload + command recording
+    double cpu_ms = 0.0;    // end_frame only: sort + upload + command recording
+    double submit_ms = 0.0; // begin_frame to end of end_frame, incl. draw_sprite calls and culling
 };
 
 class Renderer {
@@ -48,7 +50,7 @@ public:
     // Throws std::invalid_argument on bad sizes, std::runtime_error on GPU failure.
     [[nodiscard]] Texture create_texture(int width, int height, std::span<const std::byte> rgba);
 
-    void set_camera(const Camera& camera) noexcept { camera_ = camera; }
+    void set_camera(const Camera& camera) noexcept;
     [[nodiscard]] const Camera& camera() const noexcept { return camera_; }
     [[nodiscard]] const RenderStats& last_stats() const noexcept { return stats_; }
 
@@ -60,6 +62,7 @@ public:
     // end_frame() must be called either way.
     bool begin_frame(Color clear_color);
     // Queues a sprite; sorting and drawing happen in end_frame().
+    // Sprites outside the camera view are culled here, before any sorting.
     // The texture must stay alive until end_frame().
     void draw_sprite(const Texture& texture, const Sprite& sprite);
     void end_frame();
@@ -84,6 +87,9 @@ private:
     Color clear_color_{};
     Vec2 viewport_{};
     Camera camera_{};
+    Rect visible_{};
+    std::uint32_t culled_ = 0;
+    std::uint64_t frame_start_ns_ = 0;
     std::vector<SpriteDraw> sprites_;
     RenderStats stats_{};
 };

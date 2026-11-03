@@ -356,8 +356,14 @@ bool Renderer::set_vsync(bool enabled) {
     return true;
 }
 
+void Renderer::set_camera(const Camera& camera) noexcept {
+    camera_ = camera;
+    visible_ = visible_world_rect(camera_, viewport_);
+}
+
 bool Renderer::begin_frame(Color clear_color) {
     sprites_.clear();
+    culled_ = 0;
     frame_target_ = nullptr;
     clear_color_ = clear_color;
 
@@ -377,6 +383,8 @@ bool Renderer::begin_frame(Color clear_color) {
         return false;
     }
     viewport_ = Vec2{static_cast<float>(width), static_cast<float>(height)};
+    visible_ = visible_world_rect(camera_, viewport_);
+    frame_start_ns_ = SDL_GetTicksNS();
     return frame_target_ != nullptr;
 }
 
@@ -384,11 +392,16 @@ void Renderer::draw_sprite(const Texture& texture, const Sprite& sprite) {
     if (frame_target_ == nullptr || texture.native_handle() == nullptr) {
         return;
     }
+    const Rect world_rect = sprite_world_rect(sprite);
+    if (!intersects(world_rect, visible_)) {
+        ++culled_;
+        return;
+    }
     sprites_.push_back(SpriteDraw{
         .texture = &texture,
         .layer = sprite.layer,
         .depth = sprite.depth,
-        .instance = SpriteInstance{sprite_world_rect(sprite), sprite.uv, sprite.tint},
+        .instance = SpriteInstance{world_rect, sprite.uv, sprite.tint},
     });
 }
 
@@ -461,8 +474,10 @@ void Renderer::end_frame() {
         record_draws(runs);
         stats_ = RenderStats{
             .sprites = static_cast<std::uint32_t>(sprites_.size()),
+            .culled = culled_,
             .draw_calls = static_cast<std::uint32_t>(runs.size()),
             .cpu_ms = static_cast<double>(SDL_GetTicksNS() - start_ns) * kMsPerNs,
+            .submit_ms = static_cast<double>(SDL_GetTicksNS() - frame_start_ns_) * kMsPerNs,
         };
     }
     // A command buffer must always be submitted or cancelled.
