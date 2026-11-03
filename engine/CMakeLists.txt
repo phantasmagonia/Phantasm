@@ -18,10 +18,13 @@ add_library(phantasm
 )
 add_library(phantasm::phantasm ALIAS phantasm)
 
+find_package(Threads REQUIRED)
+
 target_include_directories(phantasm PUBLIC include)
 target_compile_features(phantasm PUBLIC cxx_std_20)
 target_link_libraries(phantasm
     PRIVATE SDL3::SDL3 stb phantasm_warnings
+    PUBLIC Threads::Threads
 )
 
 phantasm_add_shaders(phantasm_shaders

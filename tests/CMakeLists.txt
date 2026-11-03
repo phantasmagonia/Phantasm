@@ -1,4 +1,5 @@
 add_executable(phantasm_tests
+    async_chunk_stream_tests.cpp
     atlas_tests.cpp
     camera_tests.cpp
     chunk_index_tests.cpp

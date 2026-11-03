@@ -57,7 +57,7 @@ How Phantasm keeps frame cost proportional to what is *visible*, not to world si
 | Off-screen work | Camera culling before sort and upload | Done |
 | World size | Chunk index returns IDs of objects intersecting the camera view | Done |
 | Chunk residency | Load nearby game-owned chunks with a per-update budget; release departed chunks | Done |
-| Background loading | Read and prepare chunks without blocking the game loop | Next |
+| Background loading | One worker loads game-owned chunk data; completed chunks join the world on the game thread | Done |
 | CPU cores | Multithreaded sorting, upload, and chunk updates | Planned |
 | Physics | Box2D v3 (MIT; multithreaded, SIMD) behind an engine interface, benchmarked before adoption | Planned |
 | GPU-driven rendering | Culling and sorting on the GPU for multi-million-object scenes | Researching |
@@ -106,7 +106,7 @@ The timings measure visibility lookup only; index construction and rendering are
 
 **Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
 many images they use. **Off-screen culling** happens in `draw_sprite`, before sorting.
-**Next:** background loading for streamed chunks, then multithreaded world updates.
+**Next:** multithreaded world updates and profiling streamed worlds end to end.
 
 Run them yourself:
 
@@ -219,9 +219,25 @@ for (const auto& [coord, data] : world.loaded()) {
 }
 ```
 
+`AsyncChunkStream<T>` uses the same camera-driven residency with one background worker:
+
+```cpp
+phantasm::AsyncChunkStream<ChunkData> world{256.0F, 1, load_chunk};
+world.update(camera_view, 4); // at most four requests queued, running, or awaiting poll
+world.poll();                 // move finished chunks into the game-thread resident map
+for (const auto& [coord, data] : world.loaded()) {
+    draw_chunk(coord, data);
+}
+```
+
+The loader must be thread-safe and cannot create SDL_GPU resources. Check
+`take_failures()` for load errors and call `retry(coord)` when a retry is appropriate.
+The stream waits for an active load when destroyed; loaders should finish or support their own
+cancellation. No end-to-end streaming frame benchmark has been recorded yet.
+
 ## Demos
 
-Example games live in [phantasm-demo-projects](https://github.com/hacengeloglu-blip/phantasm-demo-projects),
+Example games live in [phantasm-demo-projects](https://github.com/phantasmagonia/phantasm-demo-projects),
 which builds against a pinned Phantasm commit. This repository contains no art.
 
 ## Repository layout
@@ -248,6 +264,7 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | [0006](docs/adr/0006-demos-in-separate-repository.md) | Engine repo is code-only; demos in a separate repo |
 | [0007](docs/adr/0007-chunk-spatial-index.md) | World-space chunk index in the genre-neutral core |
 | [0008](docs/adr/0008-chunk-residency.md) | Bounded, game-owned chunk residency |
+| [0009](docs/adr/0009-background-chunk-loading.md) | Background chunk loading with main-thread publication |
 
 ## Roadmap
 
@@ -259,10 +276,10 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 - [x] Performance pass 1: benchmarks, texture atlas, radix sort, culling
 - [x] Chunked spatial partitioning for large worlds
 - [x] Chunk residency with bounded loading for large worlds
-- [ ] Background chunk loading
+- [x] Background chunk loading
 - [ ] Physics (Box2D v3) and collision
 - [ ] Multithreaded sort, upload, and world updates
-- [ ] M5: a small playable isometric game ([demos](https://github.com/hacengeloglu-blip/phantasm-demo-projects))
+- [ ] M5: a small playable isometric game ([demos](https://github.com/phantasmagonia/phantasm-demo-projects))
 - [ ] CI on macOS, Windows, and Linux; Direct3D 12 backend
 - [ ] v0.1 release
 
