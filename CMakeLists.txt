@@ -23,6 +23,7 @@ include(cmake/Dependencies.cmake)
 include(cmake/Shaders.cmake)
 
 add_subdirectory(engine)
+add_subdirectory(iso)
 
 if(PHANTASM_BUILD_SANDBOX)
     add_subdirectory(sandbox)

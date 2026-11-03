@@ -26,7 +26,8 @@ Space cycles the background, Esc quits.
 
 | Path | Contents |
 |---|---|
-| `engine/` | The `phantasm` library (platform, input, renderer) and its shaders |
+| `engine/` | `phantasm`: genre-neutral core (platform, input, renderer, camera, sprites) |
+| `iso/` | `phantasm_iso`: optional isometric layer (grid projection, floor levels, picking) |
 | `sandbox/` | Demo app for trying engine features |
 | `tests/` | Catch2 unit tests |
 | `docs/adr/` | Architecture decision records |
