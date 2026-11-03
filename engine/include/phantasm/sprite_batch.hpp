@@ -4,6 +4,7 @@
 #include <phantasm/geometry.hpp>
 
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace phantasm {
@@ -32,7 +33,14 @@ struct DrawRun {
     std::uint32_t count = 0;
 };
 
-// Sorts by (layer, depth, texture) and returns the draw runs.
+// Sorts by (layer, depth, texture) and returns the draw runs. Stable.
 std::vector<DrawRun> sort_and_group(std::vector<SpriteDraw>& sprites);
+
+// 64-bit key: [layer: 16 bits][depth: 32 bits][texture id: 16 bits], ordered as unsigned.
+// Layers clamp to the int16 range.
+[[nodiscard]] std::uint64_t sort_key(int layer, float depth, std::uint16_t texture_id) noexcept;
+
+// Stable LSD radix sort. Writes the indices of `keys` in sorted order into `order`.
+void radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>& order);
 
 } // namespace phantasm

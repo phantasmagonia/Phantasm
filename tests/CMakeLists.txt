@@ -7,6 +7,7 @@ add_executable(phantasm_tests
     iso_grid_tests.cpp
     log_tests.cpp
     sprite_batch_tests.cpp
+    sort_key_tests.cpp
     sprite_tests.cpp
     tile_map_tests.cpp
 )

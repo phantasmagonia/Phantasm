@@ -30,22 +30,29 @@ chunk streaming, an editor (Dear ImGui), and Direct3D 12 support. See [Roadmap](
 Performance is a first-class goal. Every number here comes from the committed benchmarks
 and states its hardware. Baseline on a **MacBook Air (M1, 8 GB RAM)**, release build:
 
-**End-to-end** (`sandbox --bench`, vsync off, 240 measured frames):
+**End-to-end** (`sandbox --bench`, vsync off, 240 measured frames). *Render CPU* is the
+engine's per-frame cost (sort, upload, command recording) and the most reliable number here;
+FPS can be capped by the macOS compositor even with vsync off.
 
-| Sprites | Textures | FPS | Frame p50 | Render CPU | Draw calls |
-|---:|---|---:|---:|---:|---:|
-| 1,000 | 1 | 351 | 2.6 ms | 0.12 ms | 1 |
-| 10,000 | 1 | 283 | 1.6 ms | 0.84 ms | 1 |
-| 100,000 | 1 | 88 | 10.4 ms | 9.5 ms | 1 |
-| 1,000,000 | 1 | 9 | 117 ms | 107 ms | 1 |
-| 100,000 | 16 separate | 34 | 29.4 ms | 28.5 ms | 93,664 |
-| 100,000 | 16 in one atlas | 96 | 10.2 ms | 9.3 ms | 1 |
+| Sprites | Textures | Render CPU | Draw calls | FPS |
+|---:|---|---:|---:|---:|
+| 1,000 | 1 | 0.28 ms | 1 | 120 (capped) |
+| 10,000 | 1 | 0.94 ms | 1 | 120 (capped) |
+| 100,000 | 1 | 2.9 ms | 1 | 120 (capped) |
+| 1,000,000 | 1 | 30.8 ms | 1 | 19 |
+| 100,000 | 16 separate | 19.6 ms | 93,702 | 49 |
+| 100,000 | 16 in one atlas | 3.0 ms | 1 | 120 (capped) |
+
+**CPU microbenchmarks** (`phantasm_benchmarks`), sorting + grouping, random depth:
+
+| Sprites | `std::stable_sort` | Radix sort (current) | Speed-up |
+|---:|---:|---:|---:|
+| 10,000 | 0.62 ms | 0.11 ms | 5.7x |
+| 100,000 | 9.1 ms | 1.3 ms | 7.1x |
+| 1,000,000 | 104 ms | 24.7 ms | 4.2x |
 
 **Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
-many images they use: 2.8x faster than separate textures at 100k sprites.
-
-**Known bottleneck:** sorting dominates render CPU (100k random-depth sprites: ~10 ms;
-~2 ms when mostly sorted). Next: radix sort and culling.
+many images they use. **Next:** culling of off-screen sprites, then multithreading.
 
 Run them yourself:
 
