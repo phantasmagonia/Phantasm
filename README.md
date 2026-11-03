@@ -14,8 +14,8 @@ Implemented and tested:
   with clamped delta time, logging via `std::format`.
 - **Renderer (SDL_GPU):** textured sprites, PNG/JPEG loading, alpha blending, pixel-art friendly
   nearest filtering.
-- **Batching:** sprites are sorted by layer, depth, and texture and drawn with instanced rendering:
-  100,000 sprites in one draw call at ~96 fps (release build, Apple Silicon).
+- **Batching:** sprites are sorted by layer, depth, and texture and drawn with instanced rendering
+  in one draw call per texture run. See [Performance](#performance).
 - **Camera:** world-space 2D camera with pan and zoom.
 - **Sprites:** pivot/anchor point, UV rect, tint, layer, depth.
 - **Isometric layer (`phantasm_iso`):** 2:1 diamond grid ↔ world projection, multiple floor levels,
@@ -23,6 +23,20 @@ Implemented and tested:
 
 Planned: isometric tilemaps, wall cutaway, collision, line of sight, lighting, animation, audio,
 chunk streaming, an editor (Dear ImGui), and Direct3D 12 support. See [Roadmap](#roadmap).
+
+## Performance
+
+Sandbox stress test, release build, one texture, vsync on.
+Measured on a **MacBook Air (M1, 8 GB RAM)**, built-in 60 Hz display.
+
+| Sprites | Draw calls | FPS | Render CPU / frame |
+|---:|---:|---:|---:|
+| 1,000 | 1 | 60 (vsync) | 0.23 ms |
+| 10,000 | 1 | 60 (vsync) | ~1.7 ms |
+| 100,000 | 1 | 60 (vsync) | ~10.5 ms |
+
+"Render CPU" covers sorting, instance upload, and command recording; sorting dominates at
+high counts. The frame budget at 60 Hz is 16.7 ms.
 
 ## Build
 
