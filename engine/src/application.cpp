@@ -52,8 +52,13 @@ void Application::run() {
         pump_events();
         on_update(clock.tick(SDL_GetTicksNS()));
 
+        const bool drawing = renderer_.begin_frame(clear_color_);
+        if (drawing) {
+            on_render();
+        }
+        renderer_.end_frame();
         // No vsync wait when nothing is presented; avoid spinning the CPU.
-        if (!renderer_.draw_frame(clear_color_)) {
+        if (!drawing) {
             SDL_Delay(kIdleSleepMs);
         }
     }

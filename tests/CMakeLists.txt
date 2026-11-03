@@ -1,5 +1,6 @@
 add_executable(phantasm_tests
     frame_clock_tests.cpp
+    geometry_tests.cpp
     input_tests.cpp
     log_tests.cpp
 )

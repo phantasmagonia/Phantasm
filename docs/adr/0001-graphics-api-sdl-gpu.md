@@ -19,6 +19,5 @@ Use SDL_GPU.
 ## Consequences
 - No new dependency; same zlib license as SDL3.
 - Native modern backend on each platform; no deprecated API on macOS.
-- Shaders must be supplied per backend (MSL / DXIL / SPIR-V). We will need a shader
-  build step (e.g. SDL_shadercross) once we draw anything beyond a clear color (M3).
+- Shaders must be supplied per backend (MSL / DXIL / SPIR-V); see ADR 0002.
 - Fewer learning resources than OpenGL.

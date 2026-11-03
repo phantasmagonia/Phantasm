@@ -34,6 +34,10 @@ public:
 
 protected:
     virtual void on_update(double delta_seconds) = 0;
+    // Draw calls go here; only called when the frame can be drawn.
+    virtual void on_render() {}
+
+    [[nodiscard]] Renderer& renderer() noexcept { return renderer_; }
 
     [[nodiscard]] const Input& input() const noexcept { return input_; }
 
