@@ -19,7 +19,8 @@ demo-projects repository).
   off by default (`PROJECT_IS_TOP_LEVEL`).
 
 ## Consequences
-- Cloning the engine is small and fast; its license is uniform (MIT).
+- Cloning the engine is small and fast. The repository used MIT when this ADR was written;
+  ADR 0010 records the later switch to GPLv3-only for future versions.
 - Engine changes that break demos are caught only when the demo repository updates its
   pinned commit; CI for demos will cover this later.
 - For local development, the demo repository can point at a local engine checkout via

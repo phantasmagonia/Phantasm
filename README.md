@@ -2,7 +2,7 @@
 
 **A performance-first, open-source 2D game engine in modern C++20, built to be the core of large
 isometric games.** Genre-neutral at its heart, with an optional isometric layer for big,
-multi-level worlds. Built on SDL3 and SDL_GPU, MIT-licensed.
+multi-level worlds. Built on SDL3 and SDL_GPU, licensed under GPLv3 only.
 
 > **Status:** early development (pre-0.1). The core renderer and isometric math work and are
 > tested; gameplay systems (physics, tilemaps, audio, editor) are on the roadmap. Developed and
@@ -13,7 +13,7 @@ multi-level worlds. Built on SDL3 and SDL_GPU, MIT-licensed.
 
 **Contents:** [Why Phantasm](#why-phantasm) · [Optimization work](#optimization-work) ·
 [Scalability](#scalability) · [Performance](#performance) · [Features](#features) ·
-[Build](#build) · [Example](#minimal-example) · [Roadmap](#roadmap)
+[Build](#build) · [Example](#minimal-example) · [Roadmap](#roadmap) · [License](#license)
 
 ## Why Phantasm
 
@@ -28,8 +28,9 @@ multi-level worlds. Built on SDL3 and SDL_GPU, MIT-licensed.
   state in the public API, and a test suite written alongside the code.
 - **Genre-neutral core.** Top-down and side-view games use the core alone; the isometric layer
   is a separate, opt-in library.
-- **Truly open.** MIT license, permissive dependencies only (zlib, MIT, public domain,
-  Apache-2.0, BSL-1.0). No copyleft code, no royalties.
+- **Open with copyleft.** Phantasm is GPLv3-only: distributed engine derivatives stay under
+  GPL terms. People can build and sell games with it, subject to the GPL's requirements for
+  a distributed game linked to the engine. Dependencies retain their own permissive licenses.
 
 ## Optimization work
 
@@ -303,6 +304,7 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | [0007](docs/adr/0007-chunk-spatial-index.md) | World-space chunk index in the genre-neutral core |
 | [0008](docs/adr/0008-chunk-residency.md) | Bounded, game-owned chunk residency |
 | [0009](docs/adr/0009-background-chunk-loading.md) | Background chunk loading with main-thread publication |
+| [0010](docs/adr/0010-gplv3-only-license.md) | GPLv3-only licensing for future Phantasm versions |
 
 ## Roadmap
 
@@ -323,5 +325,13 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 
 ## License
 
-[MIT](LICENSE). Third-party: SDL3 (zlib), stb_image and stb_rect_pack (public domain / MIT), Catch2 (BSL-1.0),
-Google Benchmark (Apache-2.0).
+Copyright (c) 2026 Cengel. Phantasm's project-owned code and documentation are licensed under the
+[GNU General Public License, version 3 only](LICENSE) (`GPL-3.0-only`), with no game-linking
+exception. If you distribute a game linked to Phantasm, the combined program generally must
+be available under GPLv3 terms. Private development does not require publishing your game.
+
+GPLv3 **allows companies to use and sell** the engine under its terms; it does not reserve
+engine sales to the author. Copies of earlier Phantasm versions obtained under the MIT license
+retain those MIT permissions. Third-party components keep their own licenses: SDL3 (zlib),
+stb_image and stb_rect_pack (public domain / MIT), Catch2 (BSL-1.0), and Google Benchmark
+(Apache-2.0).
