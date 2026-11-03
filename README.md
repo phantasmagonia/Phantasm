@@ -1,34 +1,62 @@
 # Phantasm
 
-**Phantasm is an open-source 2D game engine written in modern C++20, built on SDL3 and SDL_GPU.**
-It has a genre-neutral core and an optional isometric layer for large, multi-level
-isometric worlds. It runs natively on Metal (macOS) and Vulkan (Windows/Linux).
+**A performance-first, open-source 2D game engine in modern C++20, built to be the core of large
+isometric games.** Genre-neutral at its heart, with an optional isometric layer for big,
+multi-level worlds. Built on SDL3 and SDL_GPU, MIT-licensed.
 
-**Status:** early development. Not yet ready for production use.
+> **Status:** early development (pre-0.1). The core renderer and isometric math work and are
+> tested; gameplay systems (physics, tilemaps, audio, editor) are on the roadmap. Developed and
+> measured on macOS (Metal). Windows and Linux (Vulkan) are targets but not yet tested in CI.
 
-## Features
+**Contents:** [Why Phantasm](#why-phantasm) · [Optimization work](#optimization-work) ·
+[Scalability](#scalability) · [Performance](#performance) · [Features](#features) ·
+[Build](#build) · [Example](#minimal-example) · [Roadmap](#roadmap)
 
-Implemented and tested:
+## Why Phantasm
 
-- **Platform layer:** window, event loop, keyboard input (down / pressed / released), frame timing
-  with clamped delta time, logging via `std::format`.
-- **Renderer (SDL_GPU):** textured sprites, PNG/JPEG loading, alpha blending, pixel-art friendly
-  nearest filtering.
-- **Batching:** sprites are sorted by layer, depth, and texture and drawn with instanced rendering
-  in one draw call per texture run. See [Performance](#performance).
-- **Camera:** world-space 2D camera with pan and zoom.
-- **Sprites:** pivot/anchor point, UV rect, tint, layer, depth.
-- **Texture atlas:** packs many images into one texture (stb_rect_pack) so sprites batch together.
-- **Isometric layer (`phantasm_iso`):** 2:1 diamond grid ↔ world projection, multiple floor levels,
-  tile picking, draw-depth helpers.
+- **Fast by design, proven by benchmarks.** Every performance claim comes from committed,
+  reproducible benchmarks with the hardware stated. No optimization is merged without
+  before/after numbers in its commit message.
+- **Built for large isometric worlds.** Depth-sorted rendering that stays batched, floor
+  levels, tile picking, and off-screen culling are in the core design, not bolted on later.
+- **Modern GPU path.** SDL_GPU on native backends (Metal, Vulkan; Direct3D 12 planned),
+  instanced rendering, shaders compiled ahead of time with no runtime shader compiler.
+- **Small, readable C++20.** RAII ownership everywhere, warnings-as-errors, no hidden global
+  state in the public API, and a test suite written alongside the code.
+- **Genre-neutral core.** Top-down and side-view games use the core alone; the isometric layer
+  is a separate, opt-in library.
+- **Truly open.** MIT license, permissive dependencies only (zlib, MIT, public domain,
+  Apache-2.0, BSL-1.0). No copyleft code, no royalties.
 
-Planned: isometric tilemaps, wall cutaway, collision, line of sight, lighting, animation, audio,
-chunk streaming, an editor (Dear ImGui), and Direct3D 12 support. See [Roadmap](#roadmap).
+## Optimization work
+
+Each step was measured before and after on a MacBook Air (M1, 8 GB RAM), release build.
+
+| Optimization | What it does | Measured effect |
+|---|---|---|
+| **Instanced batching** | Sprites become per-instance data in one GPU buffer; the GPU builds quads from the vertex index | 1,000,000 sprites in **1 draw call** |
+| **Texture atlas** | Packs many images into one texture (stb_rect_pack) so depth sorting can't break batches | 100k sprites over 16 images: **93,664 → 1 draw call**, render CPU **28.5 → 9.3 ms** |
+| **Radix sort** | Stable LSD radix sort on a packed 64-bit key (layer, depth, texture) instead of a comparison sort | 100k sprites: **9.1 → 1.3 ms (7.1x)**; 1M: **104 → 24.7 ms** |
+| **Off-screen culling** | Sprites outside the camera view are dropped before sorting and upload | 1M-sprite world viewed up close: sort/upload **31.3 → 0.43 ms** |
+
+## Scalability
+
+How Phantasm keeps frame cost proportional to what is *visible*, not to world size:
+
+| Layer | Approach | Status |
+|---|---|---|
+| Draw calls | Instancing + atlases: one draw per texture run, usually one per scene | Done |
+| Sorting | Linear-time radix sort; skips key bytes that don't vary | Done |
+| Off-screen work | Camera culling before sort and upload | Done |
+| World size | Chunked spatial partitioning so games only submit chunks the camera sees; chunk streaming for huge maps | Next |
+| CPU cores | Multithreaded sorting, upload, and chunk updates | Planned |
+| Physics | Box2D v3 (MIT; multithreaded, SIMD) behind an engine interface, benchmarked before adoption | Planned |
+| GPU-driven rendering | Culling and sorting on the GPU for multi-million-object scenes | Researching |
 
 ## Performance
 
-Performance is a first-class goal. Every number here comes from the committed benchmarks
-and states its hardware. Baseline on a **MacBook Air (M1, 8 GB RAM)**, release build:
+All numbers: **MacBook Air (M1, 8 GB RAM)**, release build. Run the benchmarks yourself with
+the commands below.
 
 **End-to-end** (`sandbox --bench`, vsync off, 240 measured frames).
 *Submit* = the game's `draw_sprite` calls + culling + `end_frame`; *end_frame* = sort, upload,
@@ -70,10 +98,31 @@ cmake --preset release && cmake --build --preset release
 
 Close other apps first; background load skews results.
 
+## Features
+
+Implemented and tested:
+
+- **Platform layer:** window, event loop, keyboard input (down / pressed / released), frame timing
+  with clamped delta time, logging via `std::format`.
+- **Renderer (SDL_GPU):** textured sprites, PNG/JPEG loading, alpha blending, pixel-art friendly
+  nearest filtering.
+- **Batching:** sprites are sorted by layer, depth, and texture and drawn with instanced rendering
+  in one draw call per texture run. See [Performance](#performance).
+- **Camera:** world-space 2D camera with pan and zoom.
+- **Sprites:** pivot/anchor point, UV rect, tint, layer, depth.
+- **Texture atlas:** packs many images into one texture (stb_rect_pack) so sprites batch together.
+- **Isometric layer (`phantasm_iso`):** 2:1 diamond grid ↔ world projection, multiple floor levels,
+  tile picking, draw-depth helpers.
+
+- **Benchmarks:** Google Benchmark microbenchmarks plus an end-to-end GPU benchmark mode.
+
+Planned: chunked worlds, physics, isometric tilemaps, wall cutaway, line of sight, lighting,
+animation, audio, an editor (Dear ImGui), and Direct3D 12. See [Roadmap](#roadmap).
+
 ## Build
 
 Requirements: CMake 3.26+, Ninja, a C++20 compiler (Clang 17+, MSVC 2022), `glslc`, and `spirv-cross`.
-SDL3, stb_image, and Catch2 are downloaded automatically by CMake.
+SDL3, stb, Catch2, and Google Benchmark are downloaded automatically by CMake.
 
 ```sh
 # macOS
@@ -156,8 +205,13 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 - [x] M2: SDL_GPU clear screen
 - [x] M3: textured sprite
 - [x] M4: camera + batched sprites
-- [ ] M5: a small playable isometric game
-- [ ] CI on macOS and Windows, v0.1 release
+- [x] Performance pass 1: benchmarks, texture atlas, radix sort, culling
+- [ ] Chunked spatial partitioning and streaming for large worlds
+- [ ] Physics (Box2D v3) and collision
+- [ ] Multithreaded sort, upload, and world updates
+- [ ] M5: a small playable isometric game ([demos](https://github.com/hacengeloglu-blip/phantasm-demo-projects))
+- [ ] CI on macOS, Windows, and Linux; Direct3D 12 backend
+- [ ] v0.1 release
 
 ## License
 
