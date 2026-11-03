@@ -1,6 +1,7 @@
 add_executable(phantasm_tests
     camera_tests.cpp
     frame_clock_tests.cpp
+    frame_stats_tests.cpp
     input_tests.cpp
     iso_grid_tests.cpp
     log_tests.cpp

@@ -26,17 +26,32 @@ chunk streaming, an editor (Dear ImGui), and Direct3D 12 support. See [Roadmap](
 
 ## Performance
 
-Sandbox stress test, release build, one texture, vsync on.
-Measured on a **MacBook Air (M1, 8 GB RAM)**, built-in 60 Hz display.
+Performance is a first-class goal. Every number here comes from the committed benchmarks
+and states its hardware. Baseline on a **MacBook Air (M1, 8 GB RAM)**, release build:
 
-| Sprites | Draw calls | FPS | Render CPU / frame |
-|---:|---:|---:|---:|
-| 1,000 | 1 | 60 (vsync) | 0.23 ms |
-| 10,000 | 1 | 60 (vsync) | ~1.7 ms |
-| 100,000 | 1 | 60 (vsync) | ~10.5 ms |
+**End-to-end** (`sandbox --bench`, one texture, vsync off, 240 measured frames):
 
-"Render CPU" covers sorting, instance upload, and command recording; sorting dominates at
-high counts. The frame budget at 60 Hz is 16.7 ms.
+| Sprites | FPS | Frame p50 | Frame p99 | Render CPU |
+|---:|---:|---:|---:|---:|
+| 1,000 | 320 | 2.6 ms | 11.2 ms | 0.14 ms |
+| 10,000 | 271 | 1.6 ms | 20.4 ms | 1.0 ms |
+| 100,000 | 93 | 10.2 ms | 17.1 ms | 9.5 ms |
+| 1,000,000 | 8 | 128 ms | 165 ms | 119 ms |
+
+**Known bottlenecks** (from `phantasm_benchmarks`):
+- Sorting dominates render CPU: 100k random-depth sprites take ~10 ms (~2 ms when mostly sorted).
+- With many textures, depth order breaks batching: 1,000 sprites over 16 textures produce
+  ~936 draw calls. A texture atlas / array is the planned fix.
+
+Run them yourself:
+
+```sh
+cmake --preset release && cmake --build --preset release
+./build/release/bin/phantasm_benchmarks     # CPU microbenchmarks (Google Benchmark)
+./build/release/bin/sandbox --bench         # GPU end-to-end, vsync off
+```
+
+Close other apps first; background load skews results.
 
 ## Build
 
@@ -99,6 +114,7 @@ int main() {
 | `games/scavenger/` | Example isometric game (in progress) |
 | `sandbox/` | Demo and stress test for the core |
 | `tests/` | Catch2 unit tests |
+| `benchmarks/` | Google Benchmark microbenchmarks for hot paths |
 | `docs/adr/` | Architecture decision records |
 
 ## Architecture decisions
@@ -123,4 +139,5 @@ int main() {
 
 ## License
 
-[MIT](LICENSE). Third-party: SDL3 (zlib), stb_image (public domain / MIT), Catch2 (BSL-1.0).
+[MIT](LICENSE). Third-party: SDL3 (zlib), stb_image (public domain / MIT), Catch2 (BSL-1.0),
+Google Benchmark (Apache-2.0).

@@ -13,6 +13,18 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug
 Requires `glslc` and `spirv-cross` on PATH (shaders compile at build time).
 Executables, compiled shaders (`bin/shaders/`), and assets (`bin/assets/`) share `build/<preset>/bin/`.
 
+## Performance work
+
+Performance claims must come from benchmarks, with hardware stated. Use the release preset:
+
+```sh
+cmake --preset release && cmake --build --preset release
+./build/release/bin/phantasm_benchmarks   # add --benchmark_filter=<regex> to narrow
+./build/release/bin/sandbox --bench       # vsync off, prints fps / p50 / p99 / render CPU
+```
+
+Measure before and after every optimization; include both numbers in the commit message.
+
 ## Layout and dependency rules
 
 - `engine/` → library `phantasm` (core). Must never depend on `iso/` or any game.

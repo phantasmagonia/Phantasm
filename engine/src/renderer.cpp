@@ -321,6 +321,25 @@ void Renderer::ensure_instance_capacity(std::uint32_t count) {
     instance_capacity_ = capacity;
 }
 
+bool Renderer::set_vsync(bool enabled) {
+    SDL_GPUPresentMode mode = SDL_GPU_PRESENTMODE_VSYNC;
+    if (!enabled) {
+        if (SDL_WindowSupportsGPUPresentMode(device_, window_, SDL_GPU_PRESENTMODE_IMMEDIATE)) {
+            mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
+        } else if (SDL_WindowSupportsGPUPresentMode(device_, window_,
+                                                    SDL_GPU_PRESENTMODE_MAILBOX)) {
+            mode = SDL_GPU_PRESENTMODE_MAILBOX;
+        } else {
+            return false;
+        }
+    }
+    if (!SDL_SetGPUSwapchainParameters(device_, window_, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode)) {
+        log_error("SDL_SetGPUSwapchainParameters failed: {}", SDL_GetError());
+        return false;
+    }
+    return true;
+}
+
 bool Renderer::begin_frame(Color clear_color) {
     sprites_.clear();
     frame_target_ = nullptr;

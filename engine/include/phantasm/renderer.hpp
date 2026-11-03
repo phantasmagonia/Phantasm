@@ -47,6 +47,10 @@ public:
     [[nodiscard]] const Camera& camera() const noexcept { return camera_; }
     [[nodiscard]] const RenderStats& last_stats() const noexcept { return stats_; }
 
+    // Vsync off uses immediate (or mailbox) presentation when the backend supports it.
+    // Returns false if the requested mode is unavailable.
+    bool set_vsync(bool enabled);
+
     // Returns false if this frame can't be drawn (e.g. window minimized).
     // end_frame() must be called either way.
     bool begin_frame(Color clear_color);
