@@ -6,6 +6,3 @@ out/
 .zed/
 .vscode/
 .idea/
-
-# Local AI assistant instructions (personal)
-CLAUDE.md
