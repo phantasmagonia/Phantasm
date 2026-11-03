@@ -1,4 +1,5 @@
 #include <phantasm/application.hpp>
+#include <phantasm/atlas.hpp>
 #include <phantasm/frame_stats.hpp>
 #include <phantasm/log.hpp>
 #include <phantasm/sprite.hpp>
@@ -30,20 +31,43 @@ constexpr float kMaxSlimeSpeed = 120.0F;
 constexpr std::size_t kDefaultSlimeCount = 1000;
 constexpr std::array kSlimeCounts{std::size_t{1'000}, std::size_t{10'000},
                                   std::size_t{100'000}};
-
-constexpr std::array kBenchCounts{std::size_t{1'000}, std::size_t{10'000},
-                                  std::size_t{100'000}, std::size_t{1'000'000}};
-constexpr int kBenchWarmupFrames = 30;
-constexpr int kBenchMeasuredFrames = 240;
 constexpr double kMsPerSecond = 1000.0;
 
 constexpr int kBlobSize = 16;
+constexpr std::size_t kVariantCount = 16;
+
+// How sprites get their pixels; the benchmark compares these.
+enum class TextureMode { Single, Separate, Atlas };
+
+constexpr std::string_view mode_name(TextureMode mode) {
+    switch (mode) {
+    case TextureMode::Single: return "1 texture";
+    case TextureMode::Separate: return "16 textures";
+    case TextureMode::Atlas: return "16-image atlas";
+    }
+    return "?";
+}
+
+struct BenchScenario {
+    std::size_t sprites;
+    TextureMode mode;
+};
+
+constexpr std::array kBenchScenarios{
+    BenchScenario{1'000, TextureMode::Single},     BenchScenario{10'000, TextureMode::Single},
+    BenchScenario{100'000, TextureMode::Single},   BenchScenario{1'000'000, TextureMode::Single},
+    BenchScenario{10'000, TextureMode::Separate},  BenchScenario{10'000, TextureMode::Atlas},
+    BenchScenario{100'000, TextureMode::Separate}, BenchScenario{100'000, TextureMode::Atlas},
+};
+constexpr int kBenchWarmupFrames = 30;
+constexpr int kBenchMeasuredFrames = 240;
 
 // Placeholder sprite generated in code (no art files): a shaded round blob.
-std::vector<std::byte> make_blob_pixels() {
+// `variant` changes its radius slightly so the variants are distinct images.
+std::vector<std::byte> make_blob_pixels(std::size_t variant) {
     std::vector<std::byte> pixels(static_cast<std::size_t>(kBlobSize * kBlobSize * 4));
     const float center = static_cast<float>(kBlobSize) / 2.0F;
-    const float radius = center - 1.0F;
+    const float radius = center - 1.0F - static_cast<float>(variant % 4) * 0.5F;
     for (int y = 0; y < kBlobSize; ++y) {
         for (int x = 0; x < kBlobSize; ++x) {
             const float dx = static_cast<float>(x) + 0.5F - center;
@@ -64,41 +88,45 @@ std::vector<std::byte> make_blob_pixels() {
     return pixels;
 }
 
+std::vector<std::vector<std::byte>> make_variants() {
+    std::vector<std::vector<std::byte>> variants;
+    for (std::size_t i = 0; i < kVariantCount; ++i) {
+        variants.push_back(make_blob_pixels(i));
+    }
+    return variants;
+}
+
 struct Options {
     std::size_t slime_count = kDefaultSlimeCount;
     bool bench = false;
 };
 
-// Runs each sprite count for a fixed number of frames with vsync off.
+// Runs each scenario for a fixed number of frames with vsync off.
 struct BenchRun {
     std::size_t scenario = 0;
     int frame = 0;
     std::vector<double> frame_ms;
     std::vector<double> render_cpu_ms;
-    std::vector<double> update_ms;
+    std::vector<double> draw_calls;
 };
 
 struct Slime {
     phantasm::Vec2 position;
     phantasm::Vec2 velocity;
     phantasm::Color tint;
+    std::size_t variant = 0;
 };
 
 class Sandbox final : public phantasm::Application {
 public:
     explicit Sandbox(const Options& options)
         : Application{{.title = "Phantasm Sandbox", .width = 1280, .height = 720}},
-          slime_texture_{renderer().create_texture(kBlobSize, kBlobSize, make_blob_pixels())} {
+          variant_pixels_{make_variants()},
+          single_texture_{renderer().create_texture(kBlobSize, kBlobSize, variant_pixels_[0])},
+          separate_textures_{make_separate_textures()},
+          atlas_{phantasm::build_atlas(renderer(), variant_views())} {
         if (options.bench) {
-            if (!renderer().set_vsync(false)) {
-                phantasm::log_warn("Vsync could not be disabled; results are capped");
-            }
-            bench_.emplace();
-            renderer().set_camera({.zoom = 0.5F});
-            spawn_slimes(kBenchCounts[0]);
-            phantasm::log_info("{:>10} | {:>9} | {:>9} | {:>9} | {:>9} | {:>11} | {:>9}",
-                               "sprites", "fps", "frame avg", "frame p50", "frame p99",
-                               "render CPU", "update");
+            start_bench();
         } else {
             spawn_slimes(options.slime_count);
         }
@@ -106,63 +134,85 @@ public:
 
 protected:
     void on_update(double delta_seconds) override {
-        using phantasm::Key;
         const auto dt = static_cast<float>(delta_seconds);
-        const auto update_start = std::chrono::steady_clock::now();
-
-        if (input().was_pressed(Key::Escape)) {
+        if (input().was_pressed(phantasm::Key::Escape)) {
             request_quit();
         }
-        if (input().was_pressed(Key::Space)) {
-            next_color();
-        }
-        if (input().was_pressed(Key::Num1)) {
-            spawn_slimes(kSlimeCounts[0]);
-        }
-        if (input().was_pressed(Key::Num2)) {
-            spawn_slimes(kSlimeCounts[1]);
-        }
-        if (input().was_pressed(Key::Num3)) {
-            spawn_slimes(kSlimeCounts[2]);
-        }
-
         if (!bench_) {
+            handle_interactive_keys();
             update_camera(dt);
         }
         for (Slime& slime : slimes_) {
             move_and_bounce(slime, dt);
         }
-
-        const std::chrono::duration<double, std::milli> update_time =
-            std::chrono::steady_clock::now() - update_start;
         if (bench_) {
-            advance_bench(delta_seconds * kMsPerSecond, update_time.count());
+            advance_bench(delta_seconds * kMsPerSecond);
         } else {
             report_stats(delta_seconds);
         }
     }
 
     void on_render() override {
-        const auto size = phantasm::Vec2{
-            static_cast<float>(slime_texture_.width()) * kSpriteScale,
-            static_cast<float>(slime_texture_.height()) * kSpriteScale,
-        };
+        const phantasm::Vec2 size{static_cast<float>(kBlobSize) * kSpriteScale,
+                                  static_cast<float>(kBlobSize) * kSpriteScale};
         for (const Slime& slime : slimes_) {
-            // Feet pivot + depth from y: slimes lower on screen draw in front.
-            renderer().draw_sprite(slime_texture_, {.position = slime.position,
-                                                    .size = size,
-                                                    .pivot = {0.5F, 1.0F},
-                                                    .tint = slime.tint,
-                                                    .depth = slime.position.y});
+            // Feet pivot + depth from y: lower slimes draw in front.
+            phantasm::Sprite sprite{.position = slime.position,
+                                    .size = size,
+                                    .pivot = {0.5F, 1.0F},
+                                    .tint = slime.tint,
+                                    .depth = slime.position.y};
+            const phantasm::Texture* texture = &single_texture_;
+            if (mode_ == TextureMode::Separate) {
+                texture = &separate_textures_[slime.variant];
+            } else if (mode_ == TextureMode::Atlas) {
+                texture = &atlas_.texture;
+                sprite.uv = atlas_.uvs[slime.variant];
+            }
+            renderer().draw_sprite(*texture, sprite);
         }
     }
 
 private:
+    std::vector<phantasm::Texture> make_separate_textures() {
+        std::vector<phantasm::Texture> textures;
+        for (const auto& pixels : variant_pixels_) {
+            textures.push_back(renderer().create_texture(kBlobSize, kBlobSize, pixels));
+        }
+        return textures;
+    }
+
+    std::vector<phantasm::ImageView> variant_views() const {
+        std::vector<phantasm::ImageView> views;
+        for (const auto& pixels : variant_pixels_) {
+            views.push_back({.width = kBlobSize, .height = kBlobSize, .rgba = pixels});
+        }
+        return views;
+    }
+
+    void handle_interactive_keys() {
+        using phantasm::Key;
+        if (input().was_pressed(Key::Space)) {
+            next_color();
+        }
+        if (input().was_pressed(Key::T)) {
+            mode_ = static_cast<TextureMode>((static_cast<int>(mode_) + 1) % 3);
+            phantasm::log_info("Texture mode: {}", mode_name(mode_));
+        }
+        const std::array keys{Key::Num1, Key::Num2, Key::Num3};
+        for (std::size_t i = 0; i < keys.size(); ++i) {
+            if (input().was_pressed(keys[i])) {
+                spawn_slimes(kSlimeCounts[i]);
+            }
+        }
+    }
+
     void spawn_slimes(std::size_t count) {
         std::uniform_real_distribution<float> x{-kWorldHalfWidth, kWorldHalfWidth};
         std::uniform_real_distribution<float> y{-kWorldHalfHeight, kWorldHalfHeight};
         std::uniform_real_distribution<float> speed{-kMaxSlimeSpeed, kMaxSlimeSpeed};
         std::uniform_real_distribution<float> shade{0.7F, 1.0F};
+        std::uniform_int_distribution<std::size_t> variant{0, kVariantCount - 1};
 
         slimes_.clear();
         slimes_.reserve(count);
@@ -171,10 +221,11 @@ private:
                 .position = {x(rng_), y(rng_)},
                 .velocity = {speed(rng_), speed(rng_)},
                 .tint = {shade(rng_) * 0.4F, shade(rng_), shade(rng_) * 0.5F, 1.0F},
+                .variant = variant(rng_),
             });
         }
         if (!bench_) {
-            phantasm::log_info("{} slimes", count);
+            phantasm::log_info("{} slimes ({})", count, mode_name(mode_));
         }
     }
 
@@ -217,13 +268,31 @@ private:
         renderer().set_camera(camera);
     }
 
-    void advance_bench(double frame_ms, double update_ms) {
+    void start_bench() {
+        if (!renderer().set_vsync(false)) {
+            phantasm::log_warn("Vsync could not be disabled; results are capped");
+        }
+        bench_.emplace();
+        renderer().set_camera({.zoom = 0.5F});
+        begin_scenario(0);
+        phantasm::log_info("{:>9} | {:>14} | {:>5} | {:>9} | {:>9} | {:>9} | {:>10} | {:>6}",
+                           "sprites", "textures", "fps", "frame avg", "frame p50", "frame p99",
+                           "render CPU", "draws");
+    }
+
+    void begin_scenario(std::size_t index) {
+        mode_ = kBenchScenarios[index].mode;
+        spawn_slimes(kBenchScenarios[index].sprites);
+    }
+
+    void advance_bench(double frame_ms) {
         BenchRun& run = *bench_;
         ++run.frame;
         if (run.frame > kBenchWarmupFrames) {
+            const auto& stats = renderer().last_stats();
             run.frame_ms.push_back(frame_ms);
-            run.update_ms.push_back(update_ms);
-            run.render_cpu_ms.push_back(renderer().last_stats().cpu_ms);
+            run.render_cpu_ms.push_back(stats.cpu_ms);
+            run.draw_calls.push_back(static_cast<double>(stats.draw_calls));
         }
         if (run.frame < kBenchWarmupFrames + kBenchMeasuredFrames) {
             return;
@@ -231,18 +300,19 @@ private:
 
         const auto frame = phantasm::summarize(run.frame_ms);
         const auto render = phantasm::summarize(run.render_cpu_ms);
-        const auto update = phantasm::summarize(run.update_ms);
-        phantasm::log_info("{:>10} | {:>9.0f} | {:>6.2f} ms | {:>6.2f} ms | {:>6.2f} ms | {:>8.2f} ms | "
-                           "{:>6.2f} ms",
-                           slimes_.size(), kMsPerSecond / frame.mean, frame.mean, frame.p50,
-                           frame.p99, render.mean, update.mean);
+        const auto draws = phantasm::summarize(run.draw_calls);
+        phantasm::log_info(
+            "{:>9} | {:>14} | {:>5.0f} | {:>6.2f} ms | {:>6.2f} ms | {:>6.2f} ms | {:>7.2f} ms | "
+            "{:>6.0f}",
+            slimes_.size(), mode_name(mode_), kMsPerSecond / frame.mean, frame.mean, frame.p50,
+            frame.p99, render.mean, draws.mean);
 
-        if (++run.scenario >= kBenchCounts.size()) {
+        if (++run.scenario >= kBenchScenarios.size()) {
             request_quit();
             return;
         }
         run = BenchRun{.scenario = run.scenario};
-        spawn_slimes(kBenchCounts[run.scenario]);
+        begin_scenario(run.scenario);
     }
 
     void report_stats(double delta_seconds) {
@@ -268,7 +338,12 @@ private:
         set_clear_color(kColors[color_index_]);
     }
 
-    phantasm::Texture slime_texture_;
+    // Declared before the textures: they are created from these pixels.
+    std::vector<std::vector<std::byte>> variant_pixels_;
+    phantasm::Texture single_texture_;
+    std::vector<phantasm::Texture> separate_textures_;
+    phantasm::Atlas atlas_;
+    TextureMode mode_ = TextureMode::Single;
     std::optional<BenchRun> bench_;
     std::vector<Slime> slimes_;
     std::mt19937 rng_{12345};
@@ -298,8 +373,8 @@ Options parse_options(std::span<char*> args) {
 } // namespace
 
 // Usage: sandbox [slime_count] [--bench]
-// WASD/arrows pan, Q/E zoom, 1/2/3 = 1k/10k/100k slimes, Space cycles background.
-// --bench runs 1k..1M sprites with vsync off and prints frame-time statistics.
+// WASD/arrows pan, Q/E zoom, 1/2/3 = 1k/10k/100k slimes, T cycles texture mode,
+// Space cycles background. --bench runs fixed scenarios with vsync off.
 int main(int argc, char** argv) {
     try {
         const std::span<char*> args{argv, static_cast<std::size_t>(argc)};

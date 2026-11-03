@@ -1,4 +1,5 @@
 add_executable(phantasm_tests
+    atlas_tests.cpp
     camera_tests.cpp
     frame_clock_tests.cpp
     frame_stats_tests.cpp

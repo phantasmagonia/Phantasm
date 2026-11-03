@@ -17,8 +17,11 @@ FetchContent_Declare(
     GIT_TAG d14d46f6b44456eb88beac58cba833a4135d4c89
 )
 FetchContent_MakeAvailable(stb)
-add_library(stb_image STATIC "${PROJECT_SOURCE_DIR}/third_party/stb_image.c")
-target_include_directories(stb_image SYSTEM PUBLIC "${stb_SOURCE_DIR}")
+add_library(stb STATIC
+    "${PROJECT_SOURCE_DIR}/third_party/stb_image.c"
+    "${PROJECT_SOURCE_DIR}/third_party/stb_rect_pack.c"
+)
+target_include_directories(stb SYSTEM PUBLIC "${stb_SOURCE_DIR}")
 
 if(PHANTASM_BUILD_TESTS)
     FetchContent_Declare(

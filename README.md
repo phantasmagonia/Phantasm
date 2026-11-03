@@ -18,6 +18,7 @@ Implemented and tested:
   in one draw call per texture run. See [Performance](#performance).
 - **Camera:** world-space 2D camera with pan and zoom.
 - **Sprites:** pivot/anchor point, UV rect, tint, layer, depth.
+- **Texture atlas:** packs many images into one texture (stb_rect_pack) so sprites batch together.
 - **Isometric layer (`phantasm_iso`):** 2:1 diamond grid ↔ world projection, multiple floor levels,
   tile picking, draw-depth helpers.
 
@@ -29,19 +30,22 @@ chunk streaming, an editor (Dear ImGui), and Direct3D 12 support. See [Roadmap](
 Performance is a first-class goal. Every number here comes from the committed benchmarks
 and states its hardware. Baseline on a **MacBook Air (M1, 8 GB RAM)**, release build:
 
-**End-to-end** (`sandbox --bench`, one texture, vsync off, 240 measured frames):
+**End-to-end** (`sandbox --bench`, vsync off, 240 measured frames):
 
-| Sprites | FPS | Frame p50 | Frame p99 | Render CPU |
-|---:|---:|---:|---:|---:|
-| 1,000 | 320 | 2.6 ms | 11.2 ms | 0.14 ms |
-| 10,000 | 271 | 1.6 ms | 20.4 ms | 1.0 ms |
-| 100,000 | 93 | 10.2 ms | 17.1 ms | 9.5 ms |
-| 1,000,000 | 8 | 128 ms | 165 ms | 119 ms |
+| Sprites | Textures | FPS | Frame p50 | Render CPU | Draw calls |
+|---:|---|---:|---:|---:|---:|
+| 1,000 | 1 | 351 | 2.6 ms | 0.12 ms | 1 |
+| 10,000 | 1 | 283 | 1.6 ms | 0.84 ms | 1 |
+| 100,000 | 1 | 88 | 10.4 ms | 9.5 ms | 1 |
+| 1,000,000 | 1 | 9 | 117 ms | 107 ms | 1 |
+| 100,000 | 16 separate | 34 | 29.4 ms | 28.5 ms | 93,664 |
+| 100,000 | 16 in one atlas | 96 | 10.2 ms | 9.3 ms | 1 |
 
-**Known bottlenecks** (from `phantasm_benchmarks`):
-- Sorting dominates render CPU: 100k random-depth sprites take ~10 ms (~2 ms when mostly sorted).
-- With many textures, depth order breaks batching: 1,000 sprites over 16 textures produce
-  ~936 draw calls. A texture atlas / array is the planned fix.
+**Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
+many images they use: 2.8x faster than separate textures at 100k sprites.
+
+**Known bottleneck:** sorting dominates render CPU (100k random-depth sprites: ~10 ms;
+~2 ms when mostly sorted). Next: radix sort and culling.
 
 Run them yourself:
 
@@ -144,5 +148,5 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 
 ## License
 
-[MIT](LICENSE). Third-party: SDL3 (zlib), stb_image (public domain / MIT), Catch2 (BSL-1.0),
+[MIT](LICENSE). Third-party: SDL3 (zlib), stb_image and stb_rect_pack (public domain / MIT), Catch2 (BSL-1.0),
 Google Benchmark (Apache-2.0).

@@ -1,5 +1,6 @@
 add_library(phantasm
     src/application.cpp
+    src/atlas.cpp
     src/camera.cpp
     src/frame_clock.cpp
     src/frame_stats.cpp
@@ -18,7 +19,7 @@ add_library(phantasm::phantasm ALIAS phantasm)
 target_include_directories(phantasm PUBLIC include)
 target_compile_features(phantasm PUBLIC cxx_std_20)
 target_link_libraries(phantasm
-    PRIVATE SDL3::SDL3 stb_image phantasm_warnings
+    PRIVATE SDL3::SDL3 stb phantasm_warnings
 )
 
 phantasm_add_shaders(phantasm_shaders
