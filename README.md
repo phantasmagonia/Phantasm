@@ -8,6 +8,9 @@ multi-level worlds. Built on SDL3 and SDL_GPU, MIT-licensed.
 > tested; gameplay systems (physics, tilemaps, audio, editor) are on the roadmap. Developed and
 > measured on macOS (Metal). Windows and Linux (Vulkan) are targets but not yet tested in CI.
 
+> **AI use:** AI tools have been used to help design, write, test, and document Phantasm, and
+> will continue to be used. Build, test, and benchmark results are reported only when verified.
+
 **Contents:** [Why Phantasm](#why-phantasm) · [Optimization work](#optimization-work) ·
 [Scalability](#scalability) · [Performance](#performance) · [Features](#features) ·
 [Build](#build) · [Example](#minimal-example) · [Roadmap](#roadmap)
