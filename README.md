@@ -96,6 +96,7 @@ int main() {
 | `engine/` | `phantasm`: genre-neutral core (platform, input, renderer, camera, sprites) |
 | `engine/shaders/` | GLSL shaders, compiled to SPIR-V and MSL at build time |
 | `iso/` | `phantasm_iso`: optional isometric layer (grid projection, floor levels, picking) |
+| `games/scavenger/` | Example isometric game (in progress) |
 | `sandbox/` | Demo and stress test for the core |
 | `tests/` | Catch2 unit tests |
 | `docs/adr/` | Architecture decision records |
