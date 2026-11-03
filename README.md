@@ -47,7 +47,7 @@ Each step was measured before and after on a MacBook Air (M1, 8 GB RAM), release
 | **Texture atlas** | Packs many images into one texture (stb_rect_pack) so depth sorting can't break batches | 100k sprites over 16 images: **93,664 → 1 draw call**, render CPU **28.5 → 9.3 ms** |
 | **Radix sort** | Stable LSD radix sort on a packed 64-bit key (layer, depth, texture) instead of a comparison sort | 100k sprites: **9.1 → 1.3 ms (7.1x)**; 1M: **104 → 24.7 ms** |
 | **Off-screen culling** | Sprites outside the camera view are dropped before sorting and upload | 1M-sprite world viewed up close: sort/upload **31.3 → 0.43 ms** |
-| **Chunk index** | Games query world-space chunks before submitting sprites | 1,048,576 objects, 1,024 visible: visibility query **1.40 → 0.041 ms (34x)** |
+| **Chunk index** | Games query world-space chunks before submitting sprites; bucket-local bounds avoid extra lookups | Static 1M-sprite world, 27,838 visible: submit **15.68 → 6.85 ms (2.3x)** |
 
 ## Scalability
 
@@ -85,10 +85,22 @@ macOS compositor effects.
 | 100,000 | 16 in one atlas | 0.5 | 100,000 | 191 | 2.57 ms | 1.78 ms | 1 |
 | 1,000,000 | 16 in one atlas | 4.0 | 27,850 | 31 | 14.6 ms | 0.43 ms | 1 |
 
-The last row predates the chunk index: culling leaves ~3% of sprites, and the engine's
-sort/upload cost drops to 0.43 ms. Its submit time still includes visiting a million objects.
-Games can now query `ChunkIndex` before submission; the end-to-end sandbox has not yet been
-rewired or remeasured with that path.
+The last row uses moving sprites and predates indexed submission: culling leaves ~3% visible,
+but the game still visits a million objects each frame. The separate static-world comparison
+below uses the same generated sprites for both paths and skips movement in both cases.
+
+**Static-world GPU comparison** (`sandbox --bench-static`, vsync off, 240 measured frames):
+1,000,000 sprites in one atlas, zoom 4.0, 27,838 visible, 256-unit chunks. Index construction
+is outside the measured frames. *Submit* includes visibility lookup, sprite submission, and
+`end_frame`; it excludes world updates and background chunk loading.
+
+| Submission path | Visible | Submit CPU | end_frame CPU | Draw calls |
+|---|---:|---:|---:|---:|
+| Linear scan | 27,838 | 15.68 ms | 0.45 ms | 1 |
+| Chunk index | 27,838 | 6.85 ms | 0.56 ms | 1 |
+
+On this MacBook Air M1 (8 GB), indexed submission reduced CPU submit time by **2.3x**. FPS
+was 31 for the scan and 33 for the index; macOS compositor timing also affects those figures.
 
 **Chunk query microbenchmark** (MacBook Air M1, 8 GB, release): a regular grid of 16×16
 objects at 32-unit spacing, 256-unit chunks, and a 1,024×1,024 view containing 1,024 objects.
@@ -98,6 +110,11 @@ The timings measure visibility lookup only; index construction and rendering are
 |---:|---:|---:|---:|
 | 102,400 | 0.140 ms | 0.047 ms | 3.0x |
 | 1,048,576 | 1.40 ms | 0.041 ms | 34x |
+
+A dense-world query benchmark (`BM_DenseChunkQuery`, 1M sprites over a 2,400×1,400-unit
+world) measured **12.1 → 3.13 ms** for 256-unit chunks after storing bounds in each bucket.
+The separate dense linear scan measured 8.06 ms. These are lookup-only CPU timings on the same
+MacBook Air M1 (8 GB); the GPU comparison above includes submission and sorting.
 
 **CPU microbenchmarks** (`phantasm_benchmarks`), sorting + grouping, random depth:
 
@@ -117,6 +134,7 @@ Run them yourself:
 cmake --preset release && cmake --build --preset release
 ./build/release/bin/phantasm_benchmarks     # CPU microbenchmarks (Google Benchmark)
 ./build/release/bin/sandbox --bench         # GPU end-to-end, vsync off
+./build/release/bin/sandbox --bench-static  # static world: linear vs chunk index
 ```
 
 Close other apps first; background load skews results.
@@ -137,9 +155,10 @@ Implemented and tested:
 - **Isometric layer (`phantasm_iso`):** 2:1 diamond grid ↔ world projection, multiple floor levels,
   tile picking, draw-depth helpers.
 
-- **Benchmarks:** Google Benchmark microbenchmarks plus an end-to-end GPU benchmark mode.
+- **World visibility:** chunk index, bounded chunk residency, and background chunk loading.
+- **Benchmarks:** Google Benchmark microbenchmarks plus end-to-end GPU benchmark modes.
 
-Planned: chunked worlds, physics, isometric tilemaps, wall cutaway, line of sight, lighting,
+Planned: physics, isometric tilemaps, wall cutaway, line of sight, lighting,
 animation, audio, an editor (Dear ImGui), and Direct3D 12. See [Roadmap](#roadmap).
 
 ## Build
@@ -200,14 +219,13 @@ index when an object moves, then submit only IDs returned for the camera view:
 phantasm::ChunkIndex index{256.0F};
 index.upsert(id, phantasm::sprite_world_rect(sprites[id]));
 
-for (const auto visible_id : index.query(
-         phantasm::visible_world_rect(renderer.camera(), viewport))) {
+for (const auto visible_id : index.query(renderer.visible_rect())) {
     renderer.draw_sprite(textures[visible_id], sprites[visible_id]);
 }
 ```
 
-The game owns the sprites and textures; `ChunkIndex` stores bounds and IDs only. `viewport`
-is the drawable size in pixels, as passed to `visible_world_rect`.
+The game owns the sprites and textures; `ChunkIndex` stores bounds and IDs only. Call
+`visible_rect()` after `begin_frame()` to get the current camera view.
 
 For worlds whose chunks are created on demand, `ChunkStream<T>` holds chunk data near the camera.
 Its loader runs synchronously, so keep the per-update budget small or supply prepared data:

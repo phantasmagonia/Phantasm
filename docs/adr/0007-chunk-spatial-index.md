@@ -18,9 +18,13 @@ exact rectangle intersection, deduplicates IDs, and returns IDs in ascending ord
 objects and call `Renderer::draw_sprite` only for query results. Moving objects use `upsert`;
 deleted objects use `erase`.
 
+Each chunk bucket stores an object's bounds beside its ID. This trades memory for fewer random
+lookups during dense visibility queries.
+
 ## Consequences
 
 Visibility lookup scales with chunks and objects near the view in the measured case. Objects
 that span many chunks use more memory and cost more to update. Construction and movement costs
-are outside the current visibility benchmark. Chunk streaming and sandbox integration are
-separate follow-up work.
+are outside the current visibility benchmark. The sandbox now compares linear and indexed
+submission for a static world; moving-object index updates and background chunk loading are
+outside that GPU comparison.

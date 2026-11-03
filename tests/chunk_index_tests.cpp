@@ -39,6 +39,15 @@ TEST_CASE("Moving and removing objects update chunk membership") {
     CHECK(index.query(Rect{64, 0, 32, 32}).empty());
 }
 
+TEST_CASE("Updating bounds within one chunk refreshes query geometry") {
+    ChunkIndex index{64.0F};
+    index.upsert(4, Rect{0, 0, 8, 8});
+    index.upsert(4, Rect{40, 0, 8, 8});
+
+    CHECK(index.query(Rect{0, 0, 16, 16}).empty());
+    CHECK(index.query(Rect{40, 0, 8, 8}) == std::vector<std::uint32_t>{4});
+}
+
 TEST_CASE("Chunk index rejects invalid geometry") {
     CHECK_THROWS_AS(ChunkIndex{0.0F}, std::invalid_argument);
     ChunkIndex index{32.0F};

@@ -54,7 +54,9 @@ void ChunkIndex::remove_from_chunks(std::uint32_t id, Rect bounds) {
                 continue;
             }
             auto& ids = bucket->second;
-            ids.erase(std::remove(ids.begin(), ids.end(), id), ids.end());
+            ids.erase(std::remove_if(ids.begin(), ids.end(),
+                                     [id](const BucketEntry& entry) { return entry.id == id; }),
+                      ids.end());
             if (ids.empty()) {
                 chunks_.erase(bucket);
             }
@@ -74,7 +76,7 @@ void ChunkIndex::upsert(std::uint32_t id, Rect bounds) {
     const auto last = last_chunk(bounds);
     for (auto y = first.y; y <= last.y; ++y) {
         for (auto x = first.x; x <= last.x; ++x) {
-            chunks_[ChunkCoord{x, y}].push_back(id);
+            chunks_[ChunkCoord{x, y}].push_back(BucketEntry{id, bounds});
         }
     }
 }
@@ -103,9 +105,9 @@ std::vector<std::uint32_t> ChunkIndex::query(Rect view) const {
             if (bucket == chunks_.end()) {
                 continue;
             }
-            for (const auto id : bucket->second) {
-                if (seen.insert(id).second && intersects(objects_.at(id), view)) {
-                    result.push_back(id);
+            for (const auto& entry : bucket->second) {
+                if (intersects(entry.bounds, view) && seen.insert(entry.id).second) {
+                    result.push_back(entry.id);
                 }
             }
         }

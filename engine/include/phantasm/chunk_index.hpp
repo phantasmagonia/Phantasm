@@ -28,6 +28,10 @@ private:
     struct ChunkHash {
         [[nodiscard]] std::size_t operator()(ChunkCoord coord) const noexcept;
     };
+    struct BucketEntry {
+        std::uint32_t id;
+        Rect bounds;
+    };
 
     [[nodiscard]] ChunkCoord first_chunk(Rect rect) const noexcept;
     [[nodiscard]] ChunkCoord last_chunk(Rect rect) const noexcept;
@@ -35,7 +39,7 @@ private:
 
     float chunk_size_;
     std::unordered_map<std::uint32_t, Rect> objects_;
-    std::unordered_map<ChunkCoord, std::vector<std::uint32_t>, ChunkHash> chunks_;
+    std::unordered_map<ChunkCoord, std::vector<BucketEntry>, ChunkHash> chunks_;
 };
 
 } // namespace phantasm

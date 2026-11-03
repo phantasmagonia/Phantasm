@@ -1,5 +1,6 @@
 #include <phantasm/application.hpp>
 #include <phantasm/atlas.hpp>
+#include <phantasm/chunk_index.hpp>
 #include <phantasm/frame_stats.hpp>
 #include <phantasm/log.hpp>
 #include <phantasm/sprite.hpp>
@@ -55,6 +56,7 @@ struct BenchScenario {
     std::size_t sprites;
     TextureMode mode;
     float zoom = kOverviewZoom;
+    bool indexed = false;
 };
 
 constexpr std::array kBenchScenarios{
@@ -67,6 +69,10 @@ constexpr std::array kBenchScenarios{
     BenchScenario{100'000, TextureMode::Separate},
     BenchScenario{100'000, TextureMode::Atlas},
     BenchScenario{1'000'000, TextureMode::Atlas, kCloseZoom},
+};
+constexpr std::array kStaticBenchScenarios{
+    BenchScenario{1'000'000, TextureMode::Atlas, kCloseZoom, false},
+    BenchScenario{1'000'000, TextureMode::Atlas, kCloseZoom, true},
 };
 constexpr int kBenchWarmupFrames = 30;
 constexpr int kBenchMeasuredFrames = 240;
@@ -108,6 +114,7 @@ std::vector<std::vector<std::byte>> make_variants() {
 struct Options {
     std::size_t slime_count = kDefaultSlimeCount;
     bool bench = false;
+    bool static_bench = false;
 };
 
 // Runs each scenario for a fixed number of frames with vsync off.
@@ -136,6 +143,7 @@ public:
           single_texture_{renderer().create_texture(kBlobSize, kBlobSize, variant_pixels_[0])},
           separate_textures_{make_separate_textures()},
           atlas_{phantasm::build_atlas(renderer(), variant_views())} {
+        static_bench_ = options.static_bench;
         if (options.bench) {
             start_bench();
         } else {
@@ -153,8 +161,10 @@ protected:
             handle_interactive_keys();
             update_camera(dt);
         }
-        for (Slime& slime : slimes_) {
-            move_and_bounce(slime, dt);
+        if (!static_bench_) {
+            for (Slime& slime : slimes_) {
+                move_and_bounce(slime, dt);
+            }
         }
         if (bench_) {
             advance_bench(delta_seconds * kMsPerSecond);
@@ -164,15 +174,8 @@ protected:
     }
 
     void on_render() override {
-        const phantasm::Vec2 size{static_cast<float>(kBlobSize) * kSpriteScale,
-                                  static_cast<float>(kBlobSize) * kSpriteScale};
-        for (const Slime& slime : slimes_) {
-            // Feet pivot + depth from y: lower slimes draw in front.
-            phantasm::Sprite sprite{.position = slime.position,
-                                    .size = size,
-                                    .pivot = {0.5F, 1.0F},
-                                    .tint = slime.tint,
-                                    .depth = slime.position.y};
+        const auto draw = [this](const Slime& slime) {
+            phantasm::Sprite sprite = sprite_for(slime);
             const phantasm::Texture* texture = &single_texture_;
             if (mode_ == TextureMode::Separate) {
                 texture = &separate_textures_[slime.variant];
@@ -181,10 +184,29 @@ protected:
                 sprite.uv = atlas_.uvs[slime.variant];
             }
             renderer().draw_sprite(*texture, sprite);
+        };
+        if (indexed_) {
+            for (const auto id : index_.query(renderer().visible_rect())) {
+                draw(slimes_[id]);
+            }
+        } else {
+            for (const Slime& slime : slimes_) {
+                draw(slime);
+            }
         }
     }
 
 private:
+    static phantasm::Sprite sprite_for(const Slime& slime) {
+        const phantasm::Vec2 size{static_cast<float>(kBlobSize) * kSpriteScale,
+                                  static_cast<float>(kBlobSize) * kSpriteScale};
+        return {.position = slime.position,
+                .size = size,
+                .pivot = {0.5F, 1.0F},
+                .tint = slime.tint,
+                .depth = slime.position.y};
+    }
+
     std::vector<phantasm::Texture> make_separate_textures() {
         std::vector<phantasm::Texture> textures;
         for (const auto& pixels : variant_pixels_) {
@@ -292,9 +314,20 @@ private:
     }
 
     void begin_scenario(std::size_t index) {
-        mode_ = kBenchScenarios[index].mode;
-        renderer().set_camera({.zoom = kBenchScenarios[index].zoom});
-        spawn_slimes(kBenchScenarios[index].sprites);
+        const auto& scenario = static_bench_ ? kStaticBenchScenarios[index] : kBenchScenarios[index];
+        mode_ = scenario.mode;
+        indexed_ = scenario.indexed;
+        renderer().set_camera({.zoom = scenario.zoom});
+        if (static_bench_) {
+            rng_.seed(12345);
+        }
+        spawn_slimes(scenario.sprites);
+        if (indexed_) {
+            index_ = phantasm::ChunkIndex{256.0F};
+            for (std::uint32_t id = 0; id < slimes_.size(); ++id) {
+                index_.upsert(id, phantasm::sprite_world_rect(sprite_for(slimes_[id])));
+            }
+        }
     }
 
     void advance_bench(double frame_ms) {
@@ -320,11 +353,14 @@ private:
         phantasm::log_info(
             "{:>9} | {:>14} | {:>4.1f} | {:>9.0f} | {:>5.0f} | {:>6.2f} ms | {:>6.2f} ms | "
             "{:>6.2f} ms | {:>6.2f} ms | {:>6.0f}",
-            slimes_.size(), mode_name(mode_), renderer().camera().zoom, visible.mean,
+            slimes_.size(),
+            static_bench_ ? (indexed_ ? "chunk index" : "linear scan") : mode_name(mode_),
+            renderer().camera().zoom, visible.mean,
             kMsPerSecond / frame.mean, frame.p50, frame.p99, submit.mean, render.mean,
             draws.mean);
 
-        if (++run.scenario >= kBenchScenarios.size()) {
+        if (++run.scenario >=
+            (static_bench_ ? kStaticBenchScenarios.size() : kBenchScenarios.size())) {
             request_quit();
             return;
         }
@@ -362,6 +398,9 @@ private:
     phantasm::Atlas atlas_;
     TextureMode mode_ = TextureMode::Single;
     std::optional<BenchRun> bench_;
+    bool static_bench_ = false;
+    bool indexed_ = false;
+    phantasm::ChunkIndex index_{256.0F};
     std::vector<Slime> slimes_;
     std::mt19937 rng_{12345};
     std::size_t color_index_ = 0;
@@ -374,6 +413,11 @@ Options parse_options(std::span<char*> args) {
     for (const std::string_view arg : args) {
         if (arg == "--bench") {
             options.bench = true;
+            continue;
+        }
+        if (arg == "--bench-static") {
+            options.bench = true;
+            options.static_bench = true;
             continue;
         }
         std::size_t count = 0;
@@ -389,9 +433,9 @@ Options parse_options(std::span<char*> args) {
 
 } // namespace
 
-// Usage: sandbox [slime_count] [--bench]
+// Usage: sandbox [slime_count] [--bench | --bench-static]
 // WASD/arrows pan, Q/E zoom, 1/2/3 = 1k/10k/100k slimes, T cycles texture mode,
-// Space cycles background. --bench runs fixed scenarios with vsync off.
+// Space cycles background. --bench and --bench-static run fixed scenarios with vsync off.
 int main(int argc, char** argv) {
     try {
         const std::span<char*> args{argv, static_cast<std::size_t>(argc)};

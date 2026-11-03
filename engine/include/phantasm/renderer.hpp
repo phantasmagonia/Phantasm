@@ -52,6 +52,8 @@ public:
 
     void set_camera(const Camera& camera) noexcept;
     [[nodiscard]] const Camera& camera() const noexcept { return camera_; }
+    // Current drawable-area bounds in world coordinates, set by begin_frame().
+    [[nodiscard]] Rect visible_rect() const noexcept { return visible_; }
     [[nodiscard]] const RenderStats& last_stats() const noexcept { return stats_; }
 
     // Vsync off uses immediate (or mailbox) presentation when the backend supports it.
