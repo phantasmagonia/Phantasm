@@ -29,7 +29,9 @@ Measure before and after every optimization; include both numbers in the commit 
 
 - `engine/` → library `phantasm` (core). Must never depend on `iso/` or any game.
 - `iso/` → library `phantasm_iso`, links `phantasm`.
-- `games/<name>/` → games; link `phantasm` and optionally `phantasm_iso`.
+- Games and demos live in the separate `phantasm-demo-projects` repository (ADR 0006).
+- No art files in this repository. Tests, benchmarks, and the sandbox generate textures in code
+  (`Renderer::create_texture`).
 - SDL is a PRIVATE dependency: public headers forward-declare SDL types and never include SDL.
 - Third-party code comes in through `cmake/Dependencies.cmake` (FetchContent, pinned versions).
 

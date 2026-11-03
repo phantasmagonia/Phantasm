@@ -1,6 +1,6 @@
 # ADR 0005: One repository, separate libraries for core and isometric
 
-- Status: Accepted
+- Status: Accepted; `games/` row superseded by ADR 0006
 - Date: 2026-11-04
 
 ## Context

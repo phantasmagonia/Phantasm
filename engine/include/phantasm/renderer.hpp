@@ -7,7 +7,9 @@
 #include <phantasm/sprite_batch.hpp>
 #include <phantasm/texture.hpp>
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -42,6 +44,9 @@ public:
 
     // Loads a PNG or JPEG file. Throws std::runtime_error on failure.
     [[nodiscard]] Texture load_texture(const std::string& path);
+    // Creates a texture from tightly packed RGBA8 pixels, rows top to bottom.
+    // Throws std::invalid_argument on bad sizes, std::runtime_error on GPU failure.
+    [[nodiscard]] Texture create_texture(int width, int height, std::span<const std::byte> rgba);
 
     void set_camera(const Camera& camera) noexcept { camera_ = camera; }
     [[nodiscard]] const Camera& camera() const noexcept { return camera_; }

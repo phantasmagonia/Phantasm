@@ -1,7 +1,6 @@
 #include <phantasm/application.hpp>
 #include <phantasm/frame_stats.hpp>
 #include <phantasm/log.hpp>
-#include <phantasm/paths.hpp>
 #include <phantasm/sprite.hpp>
 #include <phantasm/texture.hpp>
 
@@ -10,6 +9,7 @@
 #include <charconv>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <optional>
 #include <random>
@@ -37,6 +37,33 @@ constexpr int kBenchWarmupFrames = 30;
 constexpr int kBenchMeasuredFrames = 240;
 constexpr double kMsPerSecond = 1000.0;
 
+constexpr int kBlobSize = 16;
+
+// Placeholder sprite generated in code (no art files): a shaded round blob.
+std::vector<std::byte> make_blob_pixels() {
+    std::vector<std::byte> pixels(static_cast<std::size_t>(kBlobSize * kBlobSize * 4));
+    const float center = static_cast<float>(kBlobSize) / 2.0F;
+    const float radius = center - 1.0F;
+    for (int y = 0; y < kBlobSize; ++y) {
+        for (int x = 0; x < kBlobSize; ++x) {
+            const float dx = static_cast<float>(x) + 0.5F - center;
+            const float dy = static_cast<float>(y) + 0.5F - center;
+            if (dx * dx + dy * dy > radius * radius) {
+                continue;
+            }
+            // Lighter toward the top-left, darker toward the bottom-right.
+            const float light = std::clamp(1.0F - (dx + dy) / (radius * 4.0F), 0.5F, 1.0F);
+            const auto shade = static_cast<std::uint8_t>(255.0F * light);
+            const auto index = static_cast<std::size_t>((y * kBlobSize + x) * 4);
+            pixels[index + 0] = std::byte{shade};
+            pixels[index + 1] = std::byte{shade};
+            pixels[index + 2] = std::byte{shade};
+            pixels[index + 3] = std::byte{255};
+        }
+    }
+    return pixels;
+}
+
 struct Options {
     std::size_t slime_count = kDefaultSlimeCount;
     bool bench = false;
@@ -61,7 +88,7 @@ class Sandbox final : public phantasm::Application {
 public:
     explicit Sandbox(const Options& options)
         : Application{{.title = "Phantasm Sandbox", .width = 1280, .height = 720}},
-          slime_texture_{renderer().load_texture(phantasm::asset_path("assets/slime.png"))} {
+          slime_texture_{renderer().create_texture(kBlobSize, kBlobSize, make_blob_pixels())} {
         if (options.bench) {
             if (!renderer().set_vsync(false)) {
                 phantasm::log_warn("Vsync could not be disabled; results are capped");
@@ -143,7 +170,7 @@ private:
             slimes_.push_back(Slime{
                 .position = {x(rng_), y(rng_)},
                 .velocity = {speed(rng_), speed(rng_)},
-                .tint = {shade(rng_), shade(rng_), shade(rng_), 1.0F},
+                .tint = {shade(rng_) * 0.4F, shade(rng_), shade(rng_) * 0.5F, 1.0F},
             });
         }
         if (!bench_) {

@@ -104,6 +104,11 @@ int main() {
 }
 ```
 
+## Demos
+
+Example games live in [phantasm-demo-projects](https://github.com/hacengeloglu-blip/phantasm-demo-projects),
+which builds against a pinned Phantasm commit. This repository contains no art.
+
 ## Repository layout
 
 | Path | Contents |
@@ -111,7 +116,6 @@ int main() {
 | `engine/` | `phantasm`: genre-neutral core (platform, input, renderer, camera, sprites) |
 | `engine/shaders/` | GLSL shaders, compiled to SPIR-V and MSL at build time |
 | `iso/` | `phantasm_iso`: optional isometric layer (grid projection, floor levels, picking) |
-| `games/scavenger/` | Example isometric game (in progress) |
 | `sandbox/` | Demo and stress test for the core |
 | `tests/` | Catch2 unit tests |
 | `benchmarks/` | Google Benchmark microbenchmarks for hot paths |
@@ -126,6 +130,7 @@ int main() {
 | [0003](docs/adr/0003-image-loading-stb.md) | stb_image for image decoding |
 | [0004](docs/adr/0004-isometric-first-general-core.md) | Isometric-first, genre-neutral core |
 | [0005](docs/adr/0005-module-layout.md) | One repo, separate core and isometric libraries |
+| [0006](docs/adr/0006-demos-in-separate-repository.md) | Engine repo is code-only; demos in a separate repo |
 
 ## Roadmap
 

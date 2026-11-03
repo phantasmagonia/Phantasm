@@ -227,12 +227,29 @@ Texture Renderer::load_texture(const std::string& path) {
     const auto file = load_file(path, file_size);
     const detail::Image image =
         detail::decode_image(std::span{static_cast<const std::byte*>(file.get()), file_size});
-    if (image.width > kMaxTextureSize || image.height > kMaxTextureSize) {
-        throw std::runtime_error("Texture too large: " + path);
+    const std::size_t byte_count = static_cast<std::size_t>(image.width) *
+                                   static_cast<std::size_t>(image.height) * kBytesPerPixel;
+    try {
+        return create_texture(
+            image.width, image.height,
+            std::span{reinterpret_cast<const std::byte*>(image.pixels.get()), byte_count});
+    } catch (const std::exception& error) {
+        throw std::runtime_error(path + ": " + error.what());
     }
-    const auto width = static_cast<Uint32>(image.width);
-    const auto height = static_cast<Uint32>(image.height);
+}
+
+Texture Renderer::create_texture(int width_px, int height_px, std::span<const std::byte> rgba) {
+    if (width_px <= 0 || height_px <= 0 || width_px > kMaxTextureSize ||
+        height_px > kMaxTextureSize) {
+        throw std::invalid_argument("Texture size must be 1.." +
+                                    std::to_string(kMaxTextureSize) + " pixels per side");
+    }
+    const auto width = static_cast<Uint32>(width_px);
+    const auto height = static_cast<Uint32>(height_px);
     const Uint32 byte_count = width * height * kBytesPerPixel;
+    if (rgba.size() != byte_count) {
+        throw std::invalid_argument("Pixel data must be width * height * 4 bytes (RGBA8)");
+    }
 
     SDL_GPUTextureCreateInfo texture_info{};
     texture_info.type = SDL_GPU_TEXTURETYPE_2D;
@@ -243,10 +260,9 @@ Texture Renderer::load_texture(const std::string& path) {
     texture_info.layer_count_or_depth = 1;
     texture_info.num_levels = 1;
     // Wrap immediately so the texture is released if anything below throws.
-    Texture texture{device_, SDL_CreateGPUTexture(device_, &texture_info), image.width,
-                    image.height};
+    Texture texture{device_, SDL_CreateGPUTexture(device_, &texture_info), width_px, height_px};
     if (texture.native_handle() == nullptr) {
-        throw_sdl_error("Creating texture for " + path);
+        throw_sdl_error("Creating texture");
     }
 
     // CPU memory -> transfer buffer -> GPU texture (via a copy pass).
@@ -262,7 +278,7 @@ Texture Renderer::load_texture(const std::string& path) {
     if (mapped == nullptr) {
         throw_sdl_error("Mapping transfer buffer");
     }
-    std::memcpy(mapped, image.pixels.get(), byte_count);
+    std::memcpy(mapped, rgba.data(), byte_count);
     SDL_UnmapGPUTransferBuffer(device_, transfer.get());
 
     SDL_GPUCommandBuffer* commands = SDL_AcquireGPUCommandBuffer(device_);

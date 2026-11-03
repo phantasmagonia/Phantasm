@@ -7,12 +7,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Executables, shaders, and assets share one folder so runtime paths are simple.
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+# A parent project that includes Phantasm may choose its own folder.
+if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+endif()
 
-option(PHANTASM_BUILD_SANDBOX "Build the sandbox demo app" ON)
-option(PHANTASM_BUILD_TESTS "Build unit tests" ON)
-option(PHANTASM_BUILD_GAMES "Build example games" ON)
-option(PHANTASM_BUILD_BENCHMARKS "Build performance benchmarks" ON)
+# Extras default to ON only when Phantasm is the top-level project, so games that
+# pull in Phantasm don't build its tests, benchmarks, or sandbox.
+option(PHANTASM_BUILD_SANDBOX "Build the sandbox demo app" ${PROJECT_IS_TOP_LEVEL})
+option(PHANTASM_BUILD_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
+option(PHANTASM_BUILD_BENCHMARKS "Build performance benchmarks" ${PROJECT_IS_TOP_LEVEL})
 
 add_library(phantasm_warnings INTERFACE)
 if(MSVC)
@@ -29,10 +33,6 @@ add_subdirectory(iso)
 
 if(PHANTASM_BUILD_SANDBOX)
     add_subdirectory(sandbox)
-endif()
-
-if(PHANTASM_BUILD_GAMES)
-    add_subdirectory(games/scavenger)
 endif()
 
 if(PHANTASM_BUILD_BENCHMARKS)
