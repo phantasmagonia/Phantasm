@@ -13,7 +13,7 @@ TEST_CASE("A key is pressed only on the frame it goes down") {
     CHECK(input.is_down(Key::Space));
     CHECK(input.was_pressed(Key::Space));
 
-    input.begin_frame(); // still held
+    input.begin_frame();
     CHECK(input.is_down(Key::Space));
     CHECK_FALSE(input.was_pressed(Key::Space));
 }

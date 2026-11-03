@@ -19,7 +19,6 @@ TEST_CASE("FrameClock returns seconds elapsed since the previous tick") {
 TEST_CASE("FrameClock clamps huge gaps so a stall does not explode the simulation") {
     FrameClock clock{0};
 
-    // e.g. the window was dragged or the debugger paused for 5 seconds
     CHECK(clock.tick(5'000 * kNsPerMs) == Catch::Approx(FrameClock::kMaxDeltaSeconds));
 }
 

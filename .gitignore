@@ -1,12 +1,7 @@
-# Build output
 build/
 out/
-
-# Personal / scratch
 .scratch/
 .DS_Store
-
-# Editor caches
 .cache/
 .zed/
 .vscode/

@@ -1,7 +1,5 @@
-# Third-party dependencies, downloaded at configure time and pinned to exact tags.
 include(FetchContent)
 
-# SDL3 (zlib license): windowing, input, timing, and later SDL_GPU rendering.
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -13,7 +11,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SDL3)
 
-# Catch2 (BSL-1.0 license): unit testing.
 if(PHANTASM_BUILD_TESTS)
     FetchContent_Declare(
         Catch2

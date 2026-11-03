@@ -6,8 +6,7 @@
 
 namespace phantasm {
 
-// Physical key positions. Values are USB HID usage IDs, which SDL scancodes
-// also use, so the platform layer converts with a range-checked cast.
+// Values are USB HID usage IDs, identical to SDL scancodes.
 enum class Key : std::uint16_t {
     A = 4, B, C, D, E, F, G, H, I, J, K, L, M,
     N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
@@ -25,12 +24,9 @@ enum class Key : std::uint16_t {
 
 inline constexpr std::size_t kKeyCount = 512;
 
-// Keyboard state for the current frame. Pure logic, no SDL.
-// Edge queries (pressed/released) compare this frame against the previous one,
-// so a press AND release inside a single frame is not seen. Fine at 60+ FPS.
+// A press and release within one frame is not detected.
 class Input {
 public:
-    // Call once at the start of each frame, before feeding new events.
     void begin_frame() noexcept;
 
     void set_key(Key key, bool down) noexcept;

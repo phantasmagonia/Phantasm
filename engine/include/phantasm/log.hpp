@@ -11,11 +11,8 @@ enum class LogLevel { Debug, Info, Warn, Error };
 
 [[nodiscard]] std::string format_log_line(LogLevel level, std::string_view message);
 
-// Writes one line: Error/Warn to stderr, others to stdout.
 void log_message(LogLevel level, std::string_view message);
 
-// Convenience wrappers: log_info("fps: {}", fps);
-// std::format_string checks the format string at COMPILE time.
 template <typename... Args>
 void log_debug(std::format_string<Args...> fmt, Args&&... args) {
     log_message(LogLevel::Debug, std::format(fmt, std::forward<Args>(args)...));

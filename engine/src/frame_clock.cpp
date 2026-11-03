@@ -11,8 +11,7 @@ constexpr double kSecondsPerNs = 1e-9;
 FrameClock::FrameClock(std::uint64_t start_ns) noexcept : last_ns_{start_ns} {}
 
 double FrameClock::tick(std::uint64_t now_ns) noexcept {
-    // Unsigned subtraction would wrap around to a huge number if time went
-    // backwards, so check first.
+    // Guards against unsigned wraparound.
     if (now_ns <= last_ns_) {
         return 0.0;
     }
