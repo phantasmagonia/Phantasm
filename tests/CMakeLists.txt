@@ -6,6 +6,7 @@ add_executable(phantasm_tests
     log_tests.cpp
     sprite_batch_tests.cpp
     sprite_tests.cpp
+    tile_map_tests.cpp
 )
 target_link_libraries(phantasm_tests PRIVATE phantasm_iso Catch2::Catch2WithMain phantasm_warnings)
 
