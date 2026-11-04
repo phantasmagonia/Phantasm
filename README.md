@@ -181,6 +181,34 @@ cmake --preset release && cmake --build --preset release
 
 Close other apps first; background load skews results.
 
+**Comparison with other engines** (`benchmarks/compare`): the same workload on each engine,
+using its recommended fast path (raylib 6.2 `DrawTextureV`, SFML 3.1 one `VertexArray`, SDL 3.4
+`SDL_RenderTexture`). N moving 16×16 sprites, one texture, 1280×720, vsync off. MacBook Air
+M1 (8 GB), release, typical (p50) frame time, median of 3 interleaved runs. *Y-sorted* means
+sprites must be drawn in y order every frame, as in isometric games; engines without
+built-in depth sorting call `std::sort` each frame.
+
+| Sprites | Scenario | **Phantasm** | SFML | SDL_Renderer | raylib |
+|---:|---|---:|---:|---:|---:|
+| 10,000 | y-sorted | 1.09 ms | **0.61 ms** | 1.18 ms | 1.79 ms |
+| 50,000 | y-sorted | **2.09 ms** | 2.77 ms | 5.04 ms | 7.79 ms |
+| 100,000 | y-sorted | **3.10 ms** | 5.93 ms | 10.44 ms | 15.91 ms |
+| 200,000 | y-sorted | **7.85 ms** | 12.34 ms | 21.45 ms | 30.58 ms |
+| 10,000 | plain | 0.93 ms | **0.40 ms** | 1.47 ms | 1.62 ms |
+| 100,000 | plain | 3.13 ms | **2.46 ms** | 7.07 ms | 11.00 ms |
+| 200,000 | plain | 6.83 ms | **5.25 ms** | 13.76 ms | 18.76 ms |
+
+Where Phantasm stands today: **fastest for y-sorted (isometric) scenes from 50k sprites up**
+(1.6x SFML, 2.7x SDL_Renderer, 3.9x raylib at 200k); **second to SFML** for plain scenes and
+small counts. **Known issue:** Phantasm's worst 1% of frames (p99) spike to ~17 ms even when
+typical frames take ~1 ms; SDL_Renderer on Metal shows the same, the OpenGL engines do not.
+Reproduce with:
+
+```sh
+cmake -S benchmarks/compare -B build/compare -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/compare && benchmarks/compare/run.sh build/compare
+```
+
 **Physics** (`phantasm_benchmarks`, MacBook Air M1 8 GB, release, single-threaded Box2D,
 60 Hz steps, 4 sub-steps):
 

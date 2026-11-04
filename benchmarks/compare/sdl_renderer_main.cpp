@@ -1,0 +1,47 @@
+#include "workload.hpp"
+
+#include <SDL3/SDL.h>
+
+int main(int argc, char** argv) {
+    const auto options = compare::parse(argc, argv);
+    SDL_Init(SDL_INIT_VIDEO);
+    SDL_Window* window = nullptr;
+    SDL_Renderer* renderer = nullptr;
+    SDL_CreateWindowAndRenderer("SDL_Renderer", compare::kWindowWidth, compare::kWindowHeight, 0,
+                                &window, &renderer);
+    SDL_SetRenderVSync(renderer, 0);
+
+    const auto pixels = compare::blob_pixels();
+    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+                                             SDL_TEXTUREACCESS_STATIC, compare::kSpriteSize,
+                                             compare::kSpriteSize);
+    SDL_UpdateTexture(texture, nullptr, pixels.data(), compare::kSpriteSize * 4);
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+    auto sprites = compare::make_sprites(options.count);
+    compare::FrameTimer timer;
+
+    bool running = true;
+    while (running && timer.tick()) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            running = running && event.type != SDL_EVENT_QUIT;
+        }
+        compare::update(sprites, timer.dt());
+        if (options.sorted) {
+            compare::sort_by_y(sprites);
+        }
+        SDL_SetRenderDrawColor(renderer, 20, 22, 28, 255);
+        SDL_RenderClear(renderer);
+        for (const compare::Sprite& s : sprites) {
+            const SDL_FRect target{s.x, s.y, compare::kSpriteSize, compare::kSpriteSize};
+            SDL_RenderTexture(renderer, texture, nullptr, &target); // batched internally
+        }
+        SDL_RenderPresent(renderer);
+    }
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    timer.report("sdl_renderer", options);
+}
