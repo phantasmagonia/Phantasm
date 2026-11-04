@@ -25,6 +25,10 @@ if(MSVC)
 else()
     target_compile_options(phantasm_warnings INTERFACE -Wall -Wextra -Wpedantic -Werror)
 endif()
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # GCC rejects out-of-order designated initializers; Clang only warns when asked.
+    target_compile_options(phantasm_warnings INTERFACE -Wreorder-init-list)
+endif()
 
 include(cmake/Dependencies.cmake)
 include(cmake/Shaders.cmake)

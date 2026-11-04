@@ -51,16 +51,20 @@ Phantasm targets large isometric games. New code must not cap what a big game ca
   positions).
 - **Measured:** every scale claim backed by a benchmark at large counts.
 
-Open architecture decisions (benchmark before choosing): entity storage (EnTT vs. own
-archetype store), job system with dependencies, render graph for lighting/fog passes,
-asset pipeline with async loading by handle.
+Decided: **entity storage is Phantasm's own archetype store** (no EnTT). Prototype benchmark,
+MacBook Air M1 8 GB, release, own store vs. EnTT v3.16: update 1M 1.35 vs 1.50-2.00 ms; render
+extraction 1M 1.59 vs 3.10 ms; mixed iso world (100k movers) 291 vs 520 us; spawn/despawn churn
+1M 2.03 vs 3.42 ms; memory 47.0 vs 56.5 B/entity. EnTT won add/remove of a component (0.31 vs
+3.35 ms for 1% of 1M per frame), so frequently toggled tags live outside archetypes.
+
+Open architecture decisions (benchmark before choosing): job system with dependencies, render
+graph for lighting/fog passes, asset pipeline with async loading by handle.
 
 Apply these checks when designing or reviewing a subsystem:
 
-- **Entity storage:** compare EnTT and an archetype prototype on representative isometric
-  workloads before adopting a storage model or dependency. Measure bulk iteration, entity
-  creation/destruction, component changes, memory use, and integration cost. Contiguous storage
-  improves locality; it does not eliminate cache misses by itself.
+- **Entity storage:** use the archetype store; keep per-frame hot paths as bulk column loops.
+  Measure bulk iteration, creation/destruction, component changes, and memory when changing
+  it. Contiguous storage improves locality; it does not eliminate cache misses by itself.
 - **Resource references:** validate generational handles on lookup and test stale references
   after slot reuse. Define ownership and lifetime for textures, entities, and resident chunks.
   Saves and networking need persistent IDs mapped to runtime handles.
