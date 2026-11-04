@@ -11,7 +11,8 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug
 ```
 
 Requires `glslc` and `spirv-cross` on PATH (shaders compile at build time).
-Executables, compiled shaders (`bin/shaders/`), and assets (`bin/assets/`) share `build/<preset>/bin/`.
+Executables are written to `build/<preset>/bin/`, with compiled shaders in its `shaders/`
+subdirectory. The sandbox generates textures in code; no asset copying is needed.
 
 - After changes to C++ code, headers, shaders, tests, or build configuration, build with
   `cmake --build --preset debug` and run `ctest --preset debug --output-on-failure`

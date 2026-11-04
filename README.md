@@ -54,7 +54,9 @@ Each step was measured before and after on a MacBook Air (M1, 8 GB RAM), release
 
 ## Scalability
 
-How Phantasm keeps frame cost proportional to what is *visible*, not to world size:
+Rendering work depends on visible sprites when games use the chunk index before submission.
+Updating moving objects and maintaining their index entries still costs work proportional to
+the objects updated; streaming and the task pool help manage that work.
 
 | Layer | Current approach |
 |---|---|
@@ -71,6 +73,10 @@ How Phantasm keeps frame cost proportional to what is *visible*, not to world si
 All numbers: **MacBook Air (M1, 8 GB RAM)**, release build; expect better results on faster
 hardware (see the note under [Optimization work](#optimization-work)). Run the benchmarks
 yourself with the commands below.
+
+These are historical measurements from the implementation work, not a fresh benchmark of
+every commit. In particular, the streaming and chunk-query figures predate the later queue
+reprioritization and traversal validation fixes.
 
 **End-to-end** (`sandbox --bench`, vsync off, 240 measured frames).
 *Submit* = the game's `draw_sprite` calls + culling + `end_frame`; *end_frame* = sort, upload,
@@ -155,8 +161,9 @@ MacBook Air M1 (8 GB); the GPU comparison above includes submission and sorting.
 | 100,000 | 9.1 ms | 1.3 ms | 7.1x |
 | 1,000,000 | 104 ms | 24.7 ms | 4.2x |
 
-**Texture atlases** (`build_atlas`) keep depth-sorted scenes in one draw call no matter how
-many images they use. **Off-screen culling** happens in `draw_sprite`, before sorting.
+**Texture atlases** (`build_atlas`) allow images sharing one atlas to batch into one texture
+run. Multiple atlases or textures can still require multiple draw calls. **Off-screen culling**
+happens in `draw_sprite`, before sorting.
 
 Run them yourself:
 
@@ -195,7 +202,8 @@ Implemented and tested:
 
 ## Build
 
-Requirements: CMake 3.26+, Ninja, a C++20 compiler (Clang 17+, MSVC 2022), `glslc`, and `spirv-cross`.
+Requirements: CMake 3.26+, Ninja, a C++20 compiler (Clang 17+, GCC 14+, or MSVC 2022),
+`glslc`, and `spirv-cross`.
 SDL3, stb, Catch2, and Google Benchmark are downloaded automatically by CMake.
 
 ```sh
@@ -213,27 +221,44 @@ For code, shader, test, or build changes, build the debug preset and run
 a debug sandbox check when a display and GPU are available. Documentation-only changes
 do not require rerunning tests. See [AGENTS.md](AGENTS.md) for the verification workflow.
 
-On Ubuntu 24.04, install GCC 14, Ninja, `glslc`, `spirv-cross`, and SDL's X11 development
-libraries ([SDL's Linux build dependencies](https://wiki.libsdl.org/SDL3/README-linux)).
-Then configure with `CC=gcc-14 CXX=g++-14 cmake --preset debug` and run the build and test
-commands above.
+On Ubuntu 24.04, the CI package list and commands are:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y cmake g++-14 glslc spirv-cross ninja-build \
+  libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+  libxi-dev libxss-dev libxtst-dev libxkbcommon-dev
+CC=gcc-14 CXX=g++-14 cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug --output-on-failure
+```
+
+See [SDL's Linux build dependencies](https://wiki.libsdl.org/SDL3/README-linux)
+for additional optional platform features.
 
 On Windows, use a Visual Studio 2022 Developer Command Prompt and install the
 [Vulkan SDK](https://vulkan.lunarg.com/) for `glslc` and `spirv-cross`. Then run the same
 configure, build, and test commands. The sandbox needs a working SDL_GPU backend and display.
 
 Sandbox controls: WASD/arrows pan, Q/E zoom, 1/2/3 spawn 1k/10k/100k sprites,
-Space cycles the background, Esc quits.
+Space cycles the background, T cycles texture modes, Esc quits.
 
 ## Minimal example
 
+This draws a generated white square and moves it with the right arrow key; no art files are needed.
+
 ```cpp
 #include <phantasm/application.hpp>
-#include <phantasm/paths.hpp>
+
+#include <array>
+#include <cstddef>
+
+constexpr std::array<std::byte, 4> white_pixel{
+    std::byte{255}, std::byte{255}, std::byte{255}, std::byte{255}};
 
 class Game final : public phantasm::Application {
 public:
-    Game() : hero_{renderer().load_texture(phantasm::asset_path("assets/hero.png"))} {}
+    Game() : hero_{renderer().create_texture(1, 1, white_pixel)} {}
 
 protected:
     void on_update(double dt) override {
@@ -270,6 +295,9 @@ for (const auto visible_id : index.query(renderer.visible_rect())) {
 
 The game owns the sprites and textures; `ChunkIndex` stores bounds and IDs only. Call
 `visible_rect()` after `begin_frame()` to get the current camera view.
+Include `<phantasm/chunk_index.hpp>` for this snippet. Index operations reject unsupported
+coordinates with `std::invalid_argument` and bounds spanning more than 1,000,000 chunks with
+`std::length_error`. A rejected geometry update preserves the object's previous bounds.
 
 For worlds whose chunks are created on demand, `ChunkStream<T>` holds chunk data near the camera.
 Its loader runs synchronously, so keep the per-update budget small or supply prepared data:
@@ -297,8 +325,13 @@ for (const auto& [coord, data] : world.loaded()) {
 
 The loader must be thread-safe and cannot create SDL_GPU resources. Check
 `take_failures()` for load errors and call `retry(coord)` when a retry is appropriate.
+Queued requests are ordered nearest the current view center first, including after camera
+movement; active loads finish normally. Departed chunks and stale completed results are discarded.
 The stream waits for an active load when destroyed; loaders should finish or support their own
 cancellation. The procedural GPU benchmark above exercises both loading paths.
+
+Include `<phantasm/chunk_stream.hpp>` or `<phantasm/async_chunk_stream.hpp>` for the respective
+stream examples. `ChunkData`, `load_chunk`, and `draw_chunk` are supplied by the game.
 
 ## Demos
 
