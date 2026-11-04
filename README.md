@@ -5,7 +5,8 @@ isometric games.** Genre-neutral at its heart, with an optional isometric layer 
 multi-level worlds. Built on SDL3 and SDL_GPU, licensed under GPLv3 only.
 
 > **Status:** early development (pre-0.1). The core renderer and isometric math work and are
-> tested; physics, audio, and an editor are not implemented. Development and measurements have
+> tested; rigid-body physics (Box2D) is available in an early form; audio and an editor are
+> not implemented. Development and measurements have
 > been on macOS (Metal). Builds and unit tests pass in CI on macOS, Windows, and Linux;
 > GPU runtime behavior on Windows and Linux has not been verified yet.
 
@@ -67,6 +68,7 @@ the objects updated; streaming and the task pool help manage that work.
 | Chunk residency | Load nearby game-owned chunks with a per-update budget; release departed chunks |
 | Background loading | One worker loads game-owned chunk data; completed chunks join the world on the game thread |
 | CPU cores | Fixed worker pool for independent world-update ranges |
+| Physics | Box2D v3 behind `phantasm_physics`; fixed steps; resting bodies sleep and cost almost nothing |
 
 ## Performance
 
@@ -179,6 +181,19 @@ cmake --preset release && cmake --build --preset release
 
 Close other apps first; background load skews results.
 
+**Physics** (`phantasm_benchmarks`, MacBook Air M1 8 GB, release, single-threaded Box2D,
+60 Hz steps, 4 sub-steps):
+
+| Scenario | Bodies | Time per step |
+|---|---:|---:|
+| Top-down crowd (circles, no gravity, moving) | 10,000 | 1.46 ms |
+| Top-down crowd | 20,000 | 3.56 ms |
+| Pile collapse (boxes falling and stacking) | 10,000 | 0.94 ms |
+| Resting pile (bodies asleep) | 10,000 | ~0 ms |
+
+Box2D's own multithreading is not wired up yet; at these costs it is not needed to fit a
+16.7 ms frame.
+
 ## Features
 
 Implemented and tested:
@@ -198,13 +213,16 @@ Implemented and tested:
 - **World visibility:** chunk index, bounded chunk residency, and background chunk loading.
 - **World updates:** reusable task pool for independent ranges, with worker errors returned
   to the caller.
+- **Physics (`phantasm_physics`, opt-in):** Box2D v3 rigid bodies (boxes, circles, static /
+  kinematic / dynamic, gravity or top-down), in engine world units, with handles that stay safe
+  after a body is destroyed. `FixedStep` turns frame times into fixed simulation steps.
 - **Benchmarks:** Google Benchmark microbenchmarks plus end-to-end GPU benchmark modes.
 
 ## Build
 
 Requirements: CMake 3.26+, Ninja, a C++20 compiler (Clang 17+, GCC 14+, or MSVC 2022),
 `glslc`, and `spirv-cross`.
-SDL3, stb, Catch2, and Google Benchmark are downloaded automatically by CMake.
+SDL3, stb, Box2D, Catch2, and Google Benchmark are downloaded automatically by CMake.
 
 ```sh
 # macOS
@@ -345,6 +363,7 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | `engine/` | `phantasm`: genre-neutral core (platform, input, renderer, camera, sprites) |
 | `engine/shaders/` | GLSL shaders, compiled to SPIR-V and MSL at build time |
 | `iso/` | `phantasm_iso`: optional isometric layer (grid projection, floor levels, picking) |
+| `physics/` | `phantasm_physics`: optional rigid-body physics (Box2D) |
 | `sandbox/` | Demo and stress test for the core |
 | `tests/` | Catch2 unit tests |
 | `benchmarks/` | Google Benchmark microbenchmarks for hot paths |
@@ -359,5 +378,5 @@ publishing your game.
 
 GPLv3 **allows companies to use and sell** the engine under its terms; it does not reserve
 engine sales to the author. Third-party components keep their own licenses: SDL3 (zlib),
-stb_image and stb_rect_pack (public domain / MIT), Catch2 (BSL-1.0), and Google Benchmark
-(Apache-2.0).
+stb_image and stb_rect_pack (public domain / MIT), Box2D (MIT), Catch2 (BSL-1.0), and
+Google Benchmark (Apache-2.0).

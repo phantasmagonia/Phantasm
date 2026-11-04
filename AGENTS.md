@@ -40,6 +40,8 @@ Measure before and after every optimization; include both numbers in the commit 
 
 - `engine/` → library `phantasm` (core). Must never depend on `iso/` or any game.
 - `iso/` → library `phantasm_iso`, links `phantasm`.
+- `physics/` → library `phantasm_physics` (opt-in via `PHANTASM_BUILD_PHYSICS`), links `phantasm`;
+  Box2D is PRIVATE. Public physics API uses engine world units; convert to meters only inside.
 - Games and demos live in the separate `phantasm-demo-projects` repository.
 - No art files in this repository. Tests, benchmarks, and the sandbox generate textures in code
   (`Renderer::create_texture`).
