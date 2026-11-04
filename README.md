@@ -200,8 +200,15 @@ built-in depth sorting call `std::sort` each frame.
 
 Where Phantasm stands today: **fastest for y-sorted (isometric) scenes from 50k sprites up**
 (1.6x SFML, 2.7x SDL_Renderer, 3.9x raylib at 200k); **second to SFML** for plain scenes and
-small counts. **Known issue:** Phantasm's worst 1% of frames (p99) spike to ~17 ms even when
-typical frames take ~1 ms; SDL_Renderer on Metal shows the same, the OpenGL engines do not.
+small counts.
+
+> **Caveat: these are wall-clock times, including presenting to the screen.** On macOS, the
+> window compositor sometimes throttles Metal presentation (Phantasm and SDL_Renderer) to
+> 120 fps even with vsync off, while the OpenGL engines (raylib, SFML) are unaffected. Repeat
+> runs of the same build can therefore differ: in later runs Phantasm was held at exactly
+> 8.33 ms per frame at every sprite count. The ~17 ms p99 spikes seen for both Metal engines
+> are likely the same effect. A presentation-independent mode (offscreen rendering) is planned
+> so the comparison measures engine work only.
 Reproduce with:
 
 ```sh
