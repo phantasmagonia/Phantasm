@@ -320,7 +320,6 @@ program generally must be available under GPLv3 terms. Private development does 
 publishing your game.
 
 GPLv3 **allows companies to use and sell** the engine under its terms; it does not reserve
-engine sales to the author. Copies of earlier Phantasm versions obtained under the MIT license
-retain those MIT permissions. Third-party components keep their own licenses: SDL3 (zlib),
+engine sales to the author. Third-party components keep their own licenses: SDL3 (zlib),
 stb_image and stb_rect_pack (public domain / MIT), Catch2 (BSL-1.0), and Google Benchmark
 (Apache-2.0).
