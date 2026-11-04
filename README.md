@@ -6,7 +6,8 @@ multi-level worlds. Built on SDL3 and SDL_GPU, licensed under GPLv3 only.
 
 > **Status:** early development (pre-0.1). The core renderer and isometric math work and are
 > tested; physics, audio, and an editor are not implemented. Development and measurements have
-> been on macOS (Metal). Windows and Linux (Vulkan) are targets but not yet tested in CI.
+> been on macOS (Metal). Builds and unit tests pass in CI on macOS, Windows, and Linux;
+> GPU runtime behavior on Windows and Linux has not been verified yet.
 
 > **AI use:** AI tools have been used to help design, write, test, and document Phantasm, and
 > will continue to be used. Build, test, and benchmark results are reported only when verified.
@@ -207,7 +208,14 @@ ctest --preset debug
 ./build/debug/bin/sandbox          # optional: sprite count, e.g. 10000
 ```
 
-On Windows, install the [Vulkan SDK](https://vulkan.lunarg.com/) for `glslc` and `spirv-cross`.
+On Ubuntu 24.04, install GCC 14, Ninja, `glslc`, `spirv-cross`, and SDL's X11 development
+libraries ([SDL's Linux build dependencies](https://wiki.libsdl.org/SDL3/README-linux)).
+Then configure with `CC=gcc-14 CXX=g++-14 cmake --preset debug` and run the build and test
+commands above.
+
+On Windows, use a Visual Studio 2022 Developer Command Prompt and install the
+[Vulkan SDK](https://vulkan.lunarg.com/) for `glslc` and `spirv-cross`. Then run the same
+configure, build, and test commands. The sandbox needs a working SDL_GPU backend and display.
 
 Sandbox controls: WASD/arrows pan, Q/E zoom, 1/2/3 spawn 1k/10k/100k sprites,
 Space cycles the background, Esc quits.
