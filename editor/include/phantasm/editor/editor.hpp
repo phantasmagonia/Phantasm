@@ -12,7 +12,7 @@
 namespace phantasm::editor {
 
 struct EditorOptions {
-    std::optional<std::filesystem::path> scene; // opened at startup if set
+    std::optional<std::filesystem::path> scene{}; // opened at startup if set
     int width = 1280;
     int height = 800;
     bool hidden = false; // for tests and automation
