@@ -60,3 +60,50 @@ jobs:
 
       - name: Test
         run: ctest --preset debug
+
+  sanitizers:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ThreadSanitizer
+            flags: -fsanitize=thread
+            dir: build/tsan
+          - name: Address + UB sanitizers
+            flags: -fsanitize=address,undefined -fno-sanitize-recover=undefined
+            dir: build/asan
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      TSAN_OPTIONS: halt_on_error=1
+      ASAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install toolchain and shader tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 glslc spirv-cross ninja-build \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+            libxi-dev libxss-dev libxtst-dev libxkbcommon-dev
+
+      # ThreadSanitizer cannot map its shadow memory with Ubuntu 24.04's default ASLR entropy.
+      - name: Reduce ASLR entropy for ThreadSanitizer
+        run: sudo sysctl vm.mmap_rnd_bits=28
+
+      - name: Configure
+        run: >
+          CC=gcc-14 CXX=g++-14 cmake -S . -B ${{ matrix.dir }} -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DPHANTASM_BUILD_SANDBOX=OFF -DPHANTASM_BUILD_BENCHMARKS=OFF
+          "-DCMAKE_CXX_FLAGS=${{ matrix.flags }} -fno-omit-frame-pointer"
+          "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.flags }}"
+
+      - name: Build tests
+        run: cmake --build ${{ matrix.dir }} --target phantasm_tests
+
+      - name: Test
+        run: ${{ matrix.dir }}/bin/phantasm_tests
