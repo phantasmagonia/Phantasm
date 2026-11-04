@@ -10,28 +10,47 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <optional>
 #include <random>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace compare {
 
+// Portable environment lookup: MSVC deprecates std::getenv (C4996) in favor of _dupenv_s.
+inline std::optional<std::string> env_var(const char* name) {
+#ifdef _MSC_VER
+    char* value = nullptr;
+    std::size_t length = 0;
+    if (_dupenv_s(&value, &length, name) != 0 || value == nullptr) {
+        return std::nullopt;
+    }
+    std::string result{value};
+    std::free(value);
+    return result;
+#else
+    const char* value = std::getenv(name);
+    return value == nullptr ? std::nullopt : std::optional<std::string>{value};
+#endif
+}
+
 inline void save_screenshot(std::span<const std::uint8_t> rgba, int width, int height) {
-    const char* path = std::getenv("COMPARE_SCREENSHOT");
-    if (path == nullptr) {
+    const auto path = env_var("COMPARE_SCREENSHOT");
+    if (!path) {
         return;
     }
-    std::FILE* file = std::fopen(path, "wb");
-    if (file == nullptr) {
+    std::ofstream file{*path, std::ios::binary};
+    if (!file) {
         throw std::runtime_error("Cannot open comparison screenshot");
     }
-    std::fprintf(file, "P6\n%d %d\n255\n", width, height);
+    file << "P6\n" << width << ' ' << height << "\n255\n";
     for (std::size_t i = 0; i < rgba.size(); i += 4) {
-        std::fwrite(rgba.data() + i, 1, 3, file);
+        file.write(reinterpret_cast<const char*>(rgba.data() + i), 3);
     }
-    std::fclose(file);
 }
 
 inline constexpr int kWindowWidth = 1280;

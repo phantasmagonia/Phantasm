@@ -157,10 +157,10 @@ TEST_CASE("Bulk preparation and parallel gathering match scalar sprite submissio
     phantasm::TaskPool pool{3};
     std::vector<phantasm::Sprite> sprites(150'003);
     for (std::size_t i = 0; i < sprites.size(); ++i) {
+        // Designators must follow declaration order (GCC rejects reordering).
         sprites[i] = {.position = {static_cast<float>(i % 200), static_cast<float>(i % 100)},
-                      .size = {8, 12}, .tint = {1, 0.5F, 0.25F, 0.75F},
-                      .pivot = {0.5F, 1}, .layer = static_cast<int>(i % 3),
-                      .depth = static_cast<float>(i % 7)};
+                      .size = {8, 12}, .pivot = {0.5F, 1}, .tint = {1, 0.5F, 0.25F, 0.75F},
+                      .layer = static_cast<int>(i % 3), .depth = static_cast<float>(i % 7)};
     }
     const phantasm::Rect view{0, 0, 100, 100};
     SpriteQueue scalar;
