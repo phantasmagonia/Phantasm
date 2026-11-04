@@ -4,6 +4,7 @@ add_executable(phantasm_tests
     camera_tests.cpp
     chunk_index_tests.cpp
     chunk_stream_tests.cpp
+    fixed_step_tests.cpp
     frame_clock_tests.cpp
     frame_stats_tests.cpp
     geometry_tests.cpp
@@ -17,6 +18,11 @@ add_executable(phantasm_tests
     tile_map_tests.cpp
 )
 target_link_libraries(phantasm_tests PRIVATE phantasm_iso Catch2::Catch2WithMain phantasm_warnings)
+
+if(PHANTASM_BUILD_PHYSICS)
+    target_sources(phantasm_tests PRIVATE physics_world_tests.cpp)
+    target_link_libraries(phantasm_tests PRIVATE phantasm_physics)
+endif()
 
 include(Catch)
 catch_discover_tests(phantasm_tests)

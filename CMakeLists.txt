@@ -14,6 +14,7 @@ endif()
 
 # Extras default to ON only when Phantasm is the top-level project, so games that
 # pull in Phantasm don't build its tests, benchmarks, or sandbox.
+option(PHANTASM_BUILD_PHYSICS "Build the phantasm_physics library (Box2D)" ON)
 option(PHANTASM_BUILD_SANDBOX "Build the sandbox demo app" ${PROJECT_IS_TOP_LEVEL})
 option(PHANTASM_BUILD_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(PHANTASM_BUILD_BENCHMARKS "Build performance benchmarks" ${PROJECT_IS_TOP_LEVEL})
@@ -30,6 +31,9 @@ include(cmake/Shaders.cmake)
 
 add_subdirectory(engine)
 add_subdirectory(iso)
+if(PHANTASM_BUILD_PHYSICS)
+    add_subdirectory(physics)
+endif()
 
 if(PHANTASM_BUILD_SANDBOX)
     add_subdirectory(sandbox)

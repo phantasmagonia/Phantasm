@@ -4,6 +4,7 @@ add_library(phantasm
     src/camera.cpp
     src/chunk_index.cpp
     src/frame_clock.cpp
+    src/fixed_step.cpp
     src/frame_stats.cpp
     src/geometry.cpp
     src/image.cpp

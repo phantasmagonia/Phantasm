@@ -23,6 +23,22 @@ add_library(stb STATIC
 )
 target_include_directories(stb SYSTEM PUBLIC "${stb_SOURCE_DIR}")
 
+if(PHANTASM_BUILD_PHYSICS)
+    # Box2D v3 (MIT): 2D rigid-body physics behind phantasm_physics.
+    set(BOX2D_SAMPLES OFF CACHE BOOL "" FORCE)
+    set(BOX2D_BENCHMARKS OFF CACHE BOOL "" FORCE)
+    set(BOX2D_DOCS OFF CACHE BOOL "" FORCE)
+    set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+    set(BOX2D_VALIDATE OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        box2d
+        GIT_REPOSITORY https://github.com/erincatto/box2d.git
+        GIT_TAG v3.2.0
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(box2d)
+endif()
+
 if(PHANTASM_BUILD_TESTS)
     FetchContent_Declare(
         Catch2
