@@ -191,6 +191,14 @@ Close other apps first; background load skews results.
 | Pile collapse (boxes falling and stacking) | 10,000 | 0.94 ms |
 | Resting pile (bodies asleep) | 10,000 | ~0 ms |
 
+| Query | Workload | Time |
+|---|---|---:|
+| Raycast (nearest hit, ~5-tile range) | 1,000 rays among 10,000 walls | 0.53 ms |
+| Raycast | 10,000 rays among 10,000 walls | 6.9 ms |
+
+Raycasts suit gameplay line of sight (a few hundred per frame). Map-wide fog of war will use
+tile-grid visibility instead of physics rays.
+
 Box2D's own multithreading is not wired up yet; at these costs it is not needed to fit a
 16.7 ms frame.
 
@@ -215,7 +223,8 @@ Implemented and tested:
   to the caller.
 - **Physics (`phantasm_physics`, opt-in):** Box2D v3 rigid bodies (boxes, circles, static /
   kinematic / dynamic, gravity or top-down), in engine world units, with handles that stay safe
-  after a body is destroyed. `FixedStep` turns frame times into fixed simulation steps.
+  after a body is destroyed. Collision filters (category/mask), sensors with enter/leave events,
+  raycasts, and area queries. `FixedStep` turns frame times into fixed simulation steps.
 - **Benchmarks:** Google Benchmark microbenchmarks plus end-to-end GPU benchmark modes.
 
 ## Build
