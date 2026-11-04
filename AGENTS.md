@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Guidance for AI coding agents working on Phantasm, an open-source C++20 2D game engine
-on SDL3 + SDL_GPU with an optional isometric layer.
+on SDL3 + SDL_GPU, built to be the complete and fastest isometric engine.
 
 ## Build and test
 

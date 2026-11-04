@@ -1,8 +1,8 @@
 # Phantasm
 
-**A performance-first, open-source 2D game engine in modern C++20, built to be the core of large
-isometric games.** Genre-neutral at its heart, with an optional isometric layer for big,
-multi-level worlds. Built on SDL3 and SDL_GPU, licensed under GPLv3 only.
+**Phantasm is an isometric game engine in modern C++20, built to be the complete and the
+fastest engine for isometric games**, from small rooms to huge, multi-level worlds. Built on
+SDL3 and SDL_GPU, licensed under GPLv3 only.
 
 > **Status:** early development (pre-0.1). The core renderer and isometric math work and are
 > tested; rigid-body physics (Box2D) is available in an early form; audio and an editor are
@@ -22,14 +22,17 @@ multi-level worlds. Built on SDL3 and SDL_GPU, licensed under GPLv3 only.
 - **Fast by design, proven by benchmarks.** Every performance claim comes from committed,
   reproducible benchmarks with the hardware stated. No optimization is merged without
   before/after numbers in its commit message.
-- **Built for large isometric worlds.** Depth-sorted rendering that stays batched, floor
-  levels, tile picking, and off-screen culling are in the core design, not bolted on later.
+- **Isometric through and through.** Depth-sorted rendering that stays batched, floor
+  levels, tile picking, chunked worlds with streaming, and physics in ground space are the
+  design, not add-ons. The goal is a complete isometric engine.
+- **Measured against other engines.** A committed head-to-head benchmark against raylib, SFML,
+  and SDL_Renderer tracks where Phantasm leads and where it still has to win.
 - **Modern GPU path.** SDL_GPU on native backends (Metal and Vulkan),
   instanced rendering, shaders compiled ahead of time with no runtime shader compiler.
 - **Small, readable C++20.** RAII ownership everywhere, warnings-as-errors, no hidden global
   state in the public API, and a test suite written alongside the code.
-- **Genre-neutral core.** Top-down and side-view games use the core alone; the isometric layer
-  is a separate, opt-in library.
+- **Modular inside.** Core, isometric layer, and physics are separate libraries, so builds
+  stay fast and each part is tested on its own.
 - **Open with copyleft.** Phantasm is GPLv3-only: distributed engine derivatives stay under
   GPL terms. People can build and sell games with it, subject to the GPL's requirements for
   a distributed game linked to the engine. Dependencies retain their own permissive licenses.
@@ -404,9 +407,9 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 
 | Path | Contents |
 |---|---|
-| `engine/` | `phantasm`: genre-neutral core (platform, input, renderer, camera, sprites) |
+| `engine/` | `phantasm`: core (platform, input, renderer, camera, sprites, chunks, task pool) |
 | `engine/shaders/` | GLSL shaders, compiled to SPIR-V and MSL at build time |
-| `iso/` | `phantasm_iso`: optional isometric layer (grid projection, floor levels, picking) |
+| `iso/` | `phantasm_iso`: isometric layer (grid projection, floor levels, picking, tile maps) |
 | `physics/` | `phantasm_physics`: optional rigid-body physics (Box2D) |
 | `sandbox/` | Demo and stress test for the core |
 | `tests/` | Catch2 unit tests |
