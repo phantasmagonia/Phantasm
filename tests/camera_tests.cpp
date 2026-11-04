@@ -55,3 +55,15 @@ TEST_CASE("A non-positive zoom yields an empty visible rect") {
     CHECK(view.w == 0.0F);
     CHECK(view.h == 0.0F);
 }
+
+TEST_CASE("Screen points map back to world points through the camera") {
+    const Camera camera{.position = {100, 50}, .zoom = 2.0F};
+
+    const Vec2 center = phantasm::screen_to_world(camera, kViewport, Vec2{400, 300});
+    const Vec2 corner = phantasm::screen_to_world(camera, kViewport, Vec2{0, 0});
+
+    CHECK(center.x == Catch::Approx(100.0F));
+    CHECK(center.y == Catch::Approx(50.0F));
+    CHECK(corner.x == Catch::Approx(-100.0F));
+    CHECK(corner.y == Catch::Approx(-100.0F));
+}

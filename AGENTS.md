@@ -93,6 +93,22 @@ Apply these checks when designing or reviewing a subsystem:
 - **Profiling:** expose useful per-system timings alongside frame/render statistics. Record
   hardware, workload, and measurement boundaries for every performance comparison.
 
+## Platform principles (mobile is a target)
+
+Phantasm will ship games on iOS and Android as well as desktop. Keep the runtime portable:
+
+- The runtime (`engine/`, `iso/`, `physics/`) must never depend on the editor or Dear ImGui.
+  Editor code lives in the `phantasm_editor` library, which mobile builds omit.
+- Input must not assume a keyboard and mouse; touch and gamepad support must fit the input API.
+- Don't add new dependencies on a blocking `main()` loop: iOS and Android drive the app through
+  SDL's lifecycle (including background/foreground events). Keep per-frame work callable as one
+  iteration.
+- Load files through SDL I/O (works inside Android APKs and iOS bundles), not raw `std::fopen`
+  paths next to the executable.
+- Budget memory, texture sizes, and battery/thermals: measure on the smallest target device,
+  not only on desktop.
+- Shaders already compile to SPIR-V (Android Vulkan) and MSL (iOS Metal).
+
 ## Layout and dependency rules
 
 - `engine/` → library `phantasm` (core). Must never depend on `iso/` or any game.
@@ -100,8 +116,11 @@ Apply these checks when designing or reviewing a subsystem:
 - `physics/` → library `phantasm_physics` (opt-in via `PHANTASM_BUILD_PHYSICS`), links `phantasm`;
   Box2D is PRIVATE. Public physics API uses engine world units; convert to meters only inside.
 - Games and demos live in the separate `phantasm-demo-projects` repository.
-- `editor/` builds the separate `phantasm_editor` program. Dear ImGui and SDL remain outside
-  the `phantasm` and `phantasm_iso` public APIs; disable with `PHANTASM_BUILD_EDITOR=OFF`.
+- `editor/` → library `phantasm_editor_lib` (links `phantasm_iso`, Dear ImGui public) plus the
+  thin `phantasm_editor` launcher in `editor/app/`. Editing logic goes in `EditorState` (no
+  window, unit tested); UI code in `Editor`. Games extend it via `add_panel` / `add_inspector`.
+  Dear ImGui and SDL stay outside the `phantasm` and `phantasm_iso` public APIs; disable with
+  `PHANTASM_BUILD_EDITOR=OFF`.
 - No art files in this repository. Tests, benchmarks, and the sandbox generate textures in code
   (`Renderer::create_texture`).
 - SDL is a PRIVATE dependency: public headers forward-declare SDL types and never include SDL.

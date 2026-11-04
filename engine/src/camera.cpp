@@ -29,4 +29,12 @@ Rect visible_world_rect(const Camera& camera, Vec2 viewport) noexcept {
                 height};
 }
 
+Vec2 screen_to_world(const Camera& camera, Vec2 viewport, Vec2 screen_point) noexcept {
+    if (camera.zoom <= 0.0F) {
+        return camera.position;
+    }
+    return Vec2{(screen_point.x - viewport.x * 0.5F) / camera.zoom + camera.position.x,
+                (screen_point.y - viewport.y * 0.5F) / camera.zoom + camera.position.y};
+}
+
 } // namespace phantasm

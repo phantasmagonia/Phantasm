@@ -26,6 +26,11 @@ if(MSVC)
 else()
     target_compile_options(phantasm_warnings INTERFACE -Wall -Wextra -Wpedantic -Werror)
 endif()
+# CMake repeats static libraries reached through several targets (needed for link
+# order); Apple's linker (Xcode 15+) warns about that harmless repetition.
+if(APPLE)
+    target_link_options(phantasm_warnings INTERFACE LINKER:-no_warn_duplicate_libraries)
+endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # GCC rejects out-of-order designated initializers; Clang only warns when asked.
     target_compile_options(phantasm_warnings INTERFACE -Wreorder-init-list)

@@ -313,8 +313,12 @@ Implemented and tested:
   iteration, and a sidecar for frequently toggled flags.
 - **Scene files:** editable multi-level tile maps and named scene objects with persistent IDs;
   versioned text save/load built on the entity store.
-- **Editor (`phantasm_editor`):** separate Dear ImGui program with an off-screen isometric
-  viewport, floor-level tile painting, entity placement and inspector, and scene save/load.
+- **Editor (`phantasm_editor_lib` + `phantasm_editor`):** a Dear ImGui editor library with an
+  off-screen isometric viewport, floor-level tile painting, entity placement and inspector,
+  undo/redo, and scene save/load. Games extend it with their own panels and component
+  inspectors; `EditorState` holds all editing logic without a window, so it is unit tested.
+  The `phantasm_editor` program is a thin launcher. Desktop only: runtime and mobile builds
+  never link the editor.
 - **Physics (`phantasm_physics`, opt-in):** Box2D v3 rigid bodies (boxes, circles, static /
   kinematic / dynamic, gravity or top-down), in engine world units, with handles that stay safe
   after a body is destroyed. Collision filters (category/mask), sensors with enter/leave events,
@@ -385,6 +389,28 @@ release tile-scan benchmark for a 4096×4096 map and a 1000×750 world-unit view
 **36.7 ms** scanning the whole map versus **0.004 ms** scanning the visible range (CPU time).
 These numbers cover tile lookup only, not GPU rendering or the editor UI. Reproduce with
 `./build/release/bin/phantasm_benchmarks --benchmark_filter='BM_Editor(All|Visible)Tiles'`.
+
+**Extending the editor** from a game's own editor program:
+
+```cpp
+#include <phantasm/editor/editor.hpp>
+#include <imgui.h>
+
+struct Health { int value = 100; };
+
+int main() {
+    phantasm::editor::Editor editor;
+    editor.add_inspector("Health", [](phantasm::EntityStore& store, phantasm::Entity entity) {
+        if (auto* health = store.get<Health>(entity)) {
+            ImGui::SliderInt("HP", &health->value, 0, 100);
+        }
+    });
+    editor.add_panel("Level stats", [](phantasm::editor::EditorState& state) {
+        ImGui::Text("Entities: %zu", state.scene().entities().size());
+    });
+    editor.run(); // or call editor.frame() from your own loop
+}
+```
 
 ## Minimal example
 
@@ -513,6 +539,7 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | `engine/shaders/` | GLSL shaders, compiled to SPIR-V and MSL at build time |
 | `iso/` | `phantasm_iso`: isometric layer (grid projection, floor levels, picking, tile maps) |
 | `physics/` | `phantasm_physics`: optional rigid-body physics (Box2D) |
+| `editor/` | `phantasm_editor_lib`: editor library (desktop tooling); `editor/app/` is the launcher |
 | `sandbox/` | Demo and stress test for the core |
 | `tests/` | Catch2 unit tests |
 | `benchmarks/` | Google Benchmark microbenchmarks for hot paths |

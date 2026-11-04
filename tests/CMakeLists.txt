@@ -30,3 +30,8 @@ endif()
 
 include(Catch)
 catch_discover_tests(phantasm_tests)
+
+if(PHANTASM_BUILD_EDITOR)
+    target_sources(phantasm_tests PRIVATE editor_state_tests.cpp editor_tests.cpp)
+    target_link_libraries(phantasm_tests PRIVATE phantasm_editor_lib)
+endif()

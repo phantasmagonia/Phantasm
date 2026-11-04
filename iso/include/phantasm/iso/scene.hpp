@@ -39,6 +39,9 @@ public:
     [[nodiscard]] const SceneObject* object(std::uint64_t id) const noexcept;
     [[nodiscard]] Entity runtime_entity(std::uint64_t id) const noexcept;
     [[nodiscard]] const EntityStore& entities() const noexcept { return *store_; }
+    // Mutable access for game components (e.g. editor inspectors). Do not remove an entity's
+    // SceneObject or change its id here; use create/erase so the id lookup stays valid.
+    [[nodiscard]] EntityStore& entities() noexcept { return *store_; }
 
 private:
     void insert(SceneObject object);
