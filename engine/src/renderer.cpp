@@ -368,7 +368,7 @@ void Renderer::set_camera(const Camera& camera) noexcept {
 }
 
 bool Renderer::begin_frame(Color clear_color) {
-    sprites_.clear();
+    queue_.clear();
     culled_ = 0;
     frame_target_ = nullptr;
     clear_color_ = clear_color;
@@ -411,16 +411,12 @@ void Renderer::draw_sprite(const Texture& texture, const Sprite& sprite) {
         ++culled_;
         return;
     }
-    sprites_.push_back(SpriteDraw{
-        .texture = &texture,
-        .layer = sprite.layer,
-        .depth = sprite.depth,
-        .instance = SpriteInstance{world_rect, sprite.uv, sprite.tint},
-    });
+    queue_.push(texture, sprite.layer, sprite.depth,
+                SpriteInstance{world_rect, sprite.uv, sprite.tint});
 }
 
 void Renderer::upload_instances() {
-    const auto count = static_cast<std::uint32_t>(sprites_.size());
+    const auto count = static_cast<std::uint32_t>(queue_.size());
     ensure_instance_capacity(count);
 
     // cycle = true: if the GPU is still reading last frame's data, SDL hands us
@@ -430,9 +426,8 @@ void Renderer::upload_instances() {
     if (mapped == nullptr) {
         throw_sdl_error("Mapping sprite transfer buffer");
     }
-    for (std::uint32_t i = 0; i < count; ++i) {
-        mapped[i] = sprites_[i].instance;
-    }
+    // Sorted instances go straight into GPU-visible memory: no intermediate copy.
+    queue_.write_sorted(std::span{mapped, count});
     SDL_UnmapGPUTransferBuffer(device_, instance_transfer_);
 
     SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(commands_);
@@ -481,13 +476,13 @@ void Renderer::end_frame() {
     }
     if (frame_target_ != nullptr) {
         const Uint64 start_ns = SDL_GetTicksNS();
-        const std::vector<DrawRun> runs = sort_and_group(sprites_);
-        if (!sprites_.empty()) {
+        const std::vector<DrawRun> runs = queue_.sort();
+        if (queue_.size() != 0) {
             upload_instances();
         }
         record_draws(runs);
         stats_ = RenderStats{
-            .sprites = static_cast<std::uint32_t>(sprites_.size()),
+            .sprites = static_cast<std::uint32_t>(queue_.size()),
             .culled = culled_,
             .draw_calls = static_cast<std::uint32_t>(runs.size()),
             .cpu_ms = static_cast<double>(SDL_GetTicksNS() - start_ns) * kMsPerNs,

@@ -5,6 +5,8 @@
 #include <phantasm/texture.hpp>
 
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <span>
 
 namespace {
@@ -26,6 +28,13 @@ public:
     }
 
     compare::FrameTimer& timer() { return timer_; }
+    // PHANTASM_STATS=1 prints where CPU time goes (stderr, so run.sh output stays CSV).
+    void print_breakdown() const {
+        if (std::getenv("PHANTASM_STATS") != nullptr && stat_frames_ > 0) {
+            std::fprintf(stderr, "submit (draw_sprite calls + end_frame) %.3f ms, end_frame %.3f ms\n",
+                         submit_ms_ / stat_frames_, end_frame_ms_ / stat_frames_);
+        }
+    }
     void wait_for_gpu() { renderer().wait_idle(); }
 
 protected:
@@ -33,6 +42,10 @@ protected:
         if (!timer_.tick()) {
             request_quit();
         }
+        const auto& stats = renderer().last_stats();
+        submit_ms_ += stats.submit_ms;
+        end_frame_ms_ += stats.cpu_ms;
+        ++stat_frames_;
         compare::update(sprites_, timer_.dt());
     }
 
@@ -57,6 +70,9 @@ private:
     std::vector<compare::Sprite> sprites_;
     phantasm::Texture texture_;
     compare::FrameTimer timer_;
+    double submit_ms_ = 0.0;
+    double end_frame_ms_ = 0.0;
+    int stat_frames_ = 0;
 };
 
 } // namespace
@@ -68,4 +84,5 @@ int main(int argc, char** argv) {
     bench.wait_for_gpu();
     bench.timer().finish();
     bench.timer().report("phantasm", options);
+    bench.print_breakdown();
 }

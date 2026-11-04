@@ -11,10 +11,11 @@
 
 namespace {
 
-using phantasm::SpriteDraw;
+using phantasm::SpriteInstance;
+using phantasm::SpriteQueue;
 using phantasm::Texture;
 
-// Textures with null GPU handles: sorting only compares their addresses.
+// Textures with null GPU handles: sorting only uses their ids and addresses.
 const std::deque<Texture>& textures(std::size_t count) {
     static std::deque<Texture> pool;
     while (pool.size() < count) {
@@ -23,62 +24,67 @@ const std::deque<Texture>& textures(std::size_t count) {
     return pool;
 }
 
-enum class Order { Random, Sorted, MostlySorted, Uniform };
+enum class Order { Random, MostlySorted, Uniform };
 
-std::vector<SpriteDraw> make_sprites(std::size_t count, std::size_t texture_count, Order order) {
+struct Input {
+    const Texture* texture;
+    float depth;
+};
+
+std::vector<Input> make_inputs(std::size_t count, std::size_t texture_count, Order order) {
     std::mt19937 rng{42};
     std::uniform_real_distribution<float> depth{0.0F, 10'000.0F};
     std::uniform_int_distribution<std::size_t> pick{0, texture_count - 1};
     const auto& pool = textures(texture_count);
-
-    std::vector<SpriteDraw> sprites(count);
-    for (SpriteDraw& sprite : sprites) {
-        sprite.texture = &pool[pick(rng)];
-        sprite.depth = order == Order::Uniform ? 0.0F : depth(rng);
-    }
-    if (order == Order::Sorted || order == Order::MostlySorted) {
-        std::sort(sprites.begin(), sprites.end(),
-                  [](const SpriteDraw& a, const SpriteDraw& b) { return a.depth < b.depth; });
+    std::vector<Input> inputs(count);
+    for (Input& input : inputs) {
+        input = {&pool[pick(rng)], order == Order::Uniform ? 0.0F : depth(rng)};
     }
     if (order == Order::MostlySorted) {
-        // Frame-to-frame coherence: ~1% of sprites moved since last frame.
+        // Frame-to-frame coherence: sorted, then ~1% of sprites moved.
+        std::sort(inputs.begin(), inputs.end(),
+                  [](const Input& a, const Input& b) { return a.depth < b.depth; });
         std::uniform_int_distribution<std::size_t> index{0, count - 1};
         for (std::size_t i = 0; i < count / 100; ++i) {
-            std::swap(sprites[index(rng)], sprites[index(rng)]);
+            std::swap(inputs[index(rng)], inputs[index(rng)]);
         }
     }
-    return sprites;
+    return inputs;
 }
 
-void run_sort_and_group(benchmark::State& state, Order order) {
+// The renderer's per-frame CPU path: queue every sprite, sort, write the sorted
+// instances to (simulated) GPU memory.
+void run_queue(benchmark::State& state, Order order) {
     const auto count = static_cast<std::size_t>(state.range(0));
     const auto texture_count = static_cast<std::size_t>(state.range(1));
-    const std::vector<SpriteDraw> source = make_sprites(count, texture_count, order);
-    std::vector<SpriteDraw> sprites;
+    const auto inputs = make_inputs(count, texture_count, order);
+    std::vector<SpriteInstance> gpu_memory(count);
+    SpriteQueue queue;
+    std::size_t draw_calls = 0;
 
     for (auto _ : state) {
-        state.PauseTiming();
-        sprites = source;
-        state.ResumeTiming();
-        auto runs = phantasm::sort_and_group(sprites);
-        benchmark::DoNotOptimize(runs.data());
+        queue.clear();
+        for (const Input& input : inputs) {
+            queue.push(*input.texture, 0, input.depth, SpriteInstance{});
+        }
+        draw_calls = queue.sort().size();
+        queue.write_sorted(gpu_memory);
+        benchmark::DoNotOptimize(gpu_memory.data());
         benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(state.iterations() * state.range(0));
-    state.counters["draw_calls"] =
-        static_cast<double>(phantasm::sort_and_group(sprites).size());
+    state.counters["draw_calls"] = static_cast<double>(draw_calls);
 }
 
-void BM_SortAndGroup_Random(benchmark::State& state) {
-    run_sort_and_group(state, Order::Random);
+void BM_SpriteQueue_Random(benchmark::State& state) {
+    run_queue(state, Order::Random);
 }
-void BM_SortAndGroup_MostlySorted(benchmark::State& state) {
-    run_sort_and_group(state, Order::MostlySorted);
+void BM_SpriteQueue_MostlySorted(benchmark::State& state) {
+    run_queue(state, Order::MostlySorted);
 }
-
 // No ordering needed (one depth, one texture): the "plain" case of the engine comparison.
-void BM_SortAndGroup_Uniform(benchmark::State& state) {
-    run_sort_and_group(state, Order::Uniform);
+void BM_SpriteQueue_Uniform(benchmark::State& state) {
+    run_queue(state, Order::Uniform);
 }
 
 void sprite_args(benchmark::Benchmark* bench) {
@@ -92,6 +98,6 @@ void sprite_args(benchmark::Benchmark* bench) {
 
 } // namespace
 
-BENCHMARK(BM_SortAndGroup_Random)->Apply(sprite_args);
-BENCHMARK(BM_SortAndGroup_MostlySorted)->Apply(sprite_args);
-BENCHMARK(BM_SortAndGroup_Uniform)->Apply(sprite_args);
+BENCHMARK(BM_SpriteQueue_Random)->Apply(sprite_args);
+BENCHMARK(BM_SpriteQueue_MostlySorted)->Apply(sprite_args);
+BENCHMARK(BM_SpriteQueue_Uniform)->Apply(sprite_args);

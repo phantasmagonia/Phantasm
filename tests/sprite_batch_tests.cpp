@@ -6,40 +6,64 @@
 #include <vector>
 
 using phantasm::DrawRun;
-using phantasm::SpriteDraw;
+using phantasm::SpriteInstance;
+using phantasm::SpriteQueue;
 using phantasm::Texture;
 
 namespace {
-SpriteDraw draw(const Texture& texture, int layer, float depth, float marker = 0.0F) {
-    SpriteDraw sprite;
-    sprite.texture = &texture;
-    sprite.layer = layer;
-    sprite.depth = depth;
-    sprite.instance.rect.x = marker;
-    return sprite;
+
+// Tags each instance with a marker in rect.x so tests can see the final order.
+void push(SpriteQueue& queue, const Texture& texture, int layer, float depth, float marker) {
+    SpriteInstance instance{};
+    instance.rect.x = marker;
+    queue.push(texture, layer, depth, instance);
 }
+
+std::vector<float> sorted_markers(SpriteQueue& queue) {
+    std::vector<SpriteInstance> out(queue.size());
+    queue.write_sorted(out);
+    std::vector<float> markers;
+    for (const SpriteInstance& instance : out) {
+        markers.push_back(instance.rect.x);
+    }
+    return markers;
+}
+
 } // namespace
 
 TEST_CASE("Sprites are ordered by layer, then depth") {
     const Texture tex{nullptr, nullptr, 1, 1};
-    std::vector<SpriteDraw> sprites{
-        draw(tex, 1, 0.0F, 3),
-        draw(tex, 0, 5.0F, 2),
-        draw(tex, 0, 1.0F, 1),
-    };
+    SpriteQueue queue;
+    push(queue, tex, 1, 0.0F, 3);
+    push(queue, tex, 0, 5.0F, 2);
+    push(queue, tex, 0, 1.0F, 1);
 
-    phantasm::sort_and_group(sprites);
+    (void)queue.sort();
 
-    CHECK(sprites[0].instance.rect.x == 1);
-    CHECK(sprites[1].instance.rect.x == 2);
-    CHECK(sprites[2].instance.rect.x == 3);
+    CHECK(sorted_markers(queue) == std::vector<float>{1, 2, 3});
+}
+
+TEST_CASE("Equal keys keep submission order") {
+    const Texture tex{nullptr, nullptr, 1, 1};
+    SpriteQueue queue;
+    for (int i = 0; i < 5; ++i) {
+        push(queue, tex, 0, 0.0F, static_cast<float>(i));
+    }
+
+    const auto runs = queue.sort();
+
+    CHECK(runs.size() == 1);
+    CHECK(sorted_markers(queue) == std::vector<float>{0, 1, 2, 3, 4});
 }
 
 TEST_CASE("Consecutive sprites with the same texture share one draw run") {
     const Texture a{nullptr, nullptr, 1, 1};
-    std::vector<SpriteDraw> sprites{draw(a, 0, 0), draw(a, 0, 1), draw(a, 0, 2)};
+    SpriteQueue queue;
+    push(queue, a, 0, 0, 0);
+    push(queue, a, 0, 1, 1);
+    push(queue, a, 0, 2, 2);
 
-    const std::vector<DrawRun> runs = phantasm::sort_and_group(sprites);
+    const std::vector<DrawRun> runs = queue.sort();
 
     REQUIRE(runs.size() == 1);
     CHECK(runs[0].texture == &a);
@@ -50,19 +74,24 @@ TEST_CASE("Consecutive sprites with the same texture share one draw run") {
 TEST_CASE("Equal sort keys are grouped by texture to minimize draw calls") {
     const Texture a{nullptr, nullptr, 1, 1};
     const Texture b{nullptr, nullptr, 1, 1};
-    std::vector<SpriteDraw> sprites{draw(a, 0, 0), draw(b, 0, 0), draw(a, 0, 0), draw(b, 0, 0)};
+    SpriteQueue queue;
+    push(queue, a, 0, 0, 0);
+    push(queue, b, 0, 0, 1);
+    push(queue, a, 0, 0, 2);
+    push(queue, b, 0, 0, 3);
 
-    const auto runs = phantasm::sort_and_group(sprites);
-
-    CHECK(runs.size() == 2);
+    CHECK(queue.sort().size() == 2);
 }
 
 TEST_CASE("Depth order wins over texture batching") {
     const Texture a{nullptr, nullptr, 1, 1};
     const Texture b{nullptr, nullptr, 1, 1};
-    std::vector<SpriteDraw> sprites{draw(a, 0, 0), draw(b, 0, 1), draw(a, 0, 2)};
+    SpriteQueue queue;
+    push(queue, a, 0, 0, 0);
+    push(queue, b, 0, 1, 1);
+    push(queue, a, 0, 2, 2);
 
-    const auto runs = phantasm::sort_and_group(sprites);
+    const auto runs = queue.sort();
 
     REQUIRE(runs.size() == 3);
     CHECK(runs[1].texture == &b);
@@ -70,6 +99,20 @@ TEST_CASE("Depth order wins over texture batching") {
 }
 
 TEST_CASE("No sprites means no draw runs") {
-    std::vector<SpriteDraw> sprites;
-    CHECK(phantasm::sort_and_group(sprites).empty());
+    SpriteQueue queue;
+    CHECK(queue.sort().empty());
+    CHECK(queue.size() == 0);
+}
+
+TEST_CASE("Clearing empties the queue for the next frame") {
+    const Texture tex{nullptr, nullptr, 1, 1};
+    SpriteQueue queue;
+    push(queue, tex, 0, 3, 7);
+    (void)queue.sort();
+
+    queue.clear();
+    push(queue, tex, 0, 1, 9);
+    (void)queue.sort();
+
+    CHECK(sorted_markers(queue) == std::vector<float>{9});
 }

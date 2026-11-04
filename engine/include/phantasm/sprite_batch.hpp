@@ -3,6 +3,7 @@
 #include <phantasm/color.hpp>
 #include <phantasm/geometry.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
@@ -19,13 +20,6 @@ struct SpriteInstance {
 };
 static_assert(sizeof(SpriteInstance) == 48);
 
-struct SpriteDraw {
-    const Texture* texture = nullptr;
-    int layer = 0;
-    float depth = 0.0F;
-    SpriteInstance instance{};
-};
-
 // A contiguous range of sorted sprites sharing one texture: one draw call.
 struct DrawRun {
     const Texture* texture = nullptr;
@@ -33,8 +27,28 @@ struct DrawRun {
     std::uint32_t count = 0;
 };
 
-// Sorts by (layer, depth, texture) and returns the draw runs. Stable.
-std::vector<DrawRun> sort_and_group(std::vector<SpriteDraw>& sprites);
+// One frame's sprites, stored column-wise (keys, instances, textures) so sorting
+// touches only 8-byte keys and sorted instances can be written straight to GPU memory.
+class SpriteQueue {
+public:
+    void clear() noexcept;
+    void push(const Texture& texture, int layer, float depth, const SpriteInstance& instance);
+
+    // Sorts by (layer, depth, texture), stably, and returns the draw runs.
+    [[nodiscard]] std::vector<DrawRun> sort();
+    // Writes instances in sorted order. `out` must hold size() elements.
+    // Call after sort(); a plain memcpy when no reordering was needed.
+    void write_sorted(std::span<SpriteInstance> out) const;
+
+    [[nodiscard]] std::size_t size() const noexcept { return instances_.size(); }
+
+private:
+    std::vector<std::uint64_t> keys_;
+    std::vector<SpriteInstance> instances_;
+    std::vector<const Texture*> textures_;
+    std::vector<std::uint32_t> order_;
+    bool reordered_ = false;
+};
 
 // 64-bit key: [layer: 16 bits][depth: 32 bits][texture id: 16 bits], ordered as unsigned.
 // Layers clamp to the int16 range.

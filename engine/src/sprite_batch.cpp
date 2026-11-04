@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cstring>
 #include <cstddef>
 #include <limits>
 
@@ -29,12 +30,9 @@ std::uint32_t orderable_bits(float value) noexcept {
 
 // Reused between frames so sorting does not allocate once buffers have grown.
 struct SortScratch {
-    std::vector<std::uint64_t> input_keys;
     std::vector<std::uint64_t> keys;
     std::vector<std::uint64_t> keys_swap;
     std::vector<std::uint32_t> order_swap;
-    std::vector<std::uint32_t> order;
-    std::vector<SpriteDraw> sorted;
 };
 
 SortScratch& scratch() {
@@ -102,33 +100,42 @@ bool radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>&
     return moved;
 }
 
-std::vector<DrawRun> sort_and_group(std::vector<SpriteDraw>& sprites) {
-    SortScratch& buffers = scratch();
-    std::vector<std::uint64_t>& keys = buffers.input_keys;
-    keys.resize(sprites.size());
-    for (std::size_t i = 0; i < sprites.size(); ++i) {
-        const SpriteDraw& sprite = sprites[i];
-        const auto texture_id =
-            static_cast<std::uint16_t>(sprite.texture != nullptr ? sprite.texture->id() : 0);
-        keys[i] = sort_key(sprite.layer, sprite.depth, texture_id);
-    }
-    // All keys equal (e.g. one layer, one depth, one texture): already in order.
-    if (radix_sort(keys, buffers.order)) {
-        buffers.sorted.resize(sprites.size());
-        for (std::size_t i = 0; i < sprites.size(); ++i) {
-            buffers.sorted[i] = sprites[buffers.order[i]];
-        }
-        sprites.swap(buffers.sorted);
-    }
+void SpriteQueue::clear() noexcept {
+    keys_.clear();
+    instances_.clear();
+    textures_.clear();
+    reordered_ = false;
+}
+
+void SpriteQueue::push(const Texture& texture, int layer, float depth,
+                       const SpriteInstance& instance) {
+    keys_.push_back(sort_key(layer, depth, static_cast<std::uint16_t>(texture.id())));
+    instances_.push_back(instance);
+    textures_.push_back(&texture);
+}
+
+std::vector<DrawRun> SpriteQueue::sort() {
+    reordered_ = radix_sort(keys_, order_);
 
     std::vector<DrawRun> runs;
-    for (std::uint32_t i = 0; i < sprites.size(); ++i) {
-        if (runs.empty() || runs.back().texture != sprites[i].texture) {
-            runs.push_back(DrawRun{.texture = sprites[i].texture, .first = i, .count = 0});
+    for (std::uint32_t i = 0; i < instances_.size(); ++i) {
+        const Texture* texture = textures_[reordered_ ? order_[i] : i];
+        if (runs.empty() || runs.back().texture != texture) {
+            runs.push_back(DrawRun{.texture = texture, .first = i, .count = 0});
         }
         ++runs.back().count;
     }
     return runs;
+}
+
+void SpriteQueue::write_sorted(std::span<SpriteInstance> out) const {
+    if (!reordered_) {
+        std::memcpy(out.data(), instances_.data(), instances_.size() * sizeof(SpriteInstance));
+        return;
+    }
+    for (std::size_t i = 0; i < instances_.size(); ++i) {
+        out[i] = instances_[order_[i]];
+    }
 }
 
 } // namespace phantasm

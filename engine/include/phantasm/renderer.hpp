@@ -105,7 +105,7 @@ private:
     Rect visible_{};
     std::uint32_t culled_ = 0;
     std::uint64_t frame_start_ns_ = 0;
-    std::vector<SpriteDraw> sprites_;
+    SpriteQueue queue_;
     RenderStats stats_{};
 };
 
