@@ -13,6 +13,16 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug
 Requires `glslc` and `spirv-cross` on PATH (shaders compile at build time).
 Executables, compiled shaders (`bin/shaders/`), and assets (`bin/assets/`) share `build/<preset>/bin/`.
 
+- After changes to C++ code, headers, shaders, tests, or build configuration, build with
+  `cmake --build --preset debug` and run `ctest --preset debug --output-on-failure`
+  before committing. Run `cmake --preset debug` first after build configuration or dependency changes.
+- For bug fixes, add a regression test where practical and confirm it fails before the fix.
+  Focused tests help during development; run the full debug suite after the final code change.
+- For rendering or window changes, also run the debug sandbox when a display and GPU are available.
+- Documentation-only changes do not require rebuilding or rerunning tests.
+- Report the checks actually run and their results, including any checks that could not run.
+  Release benchmarks and CI do not replace local debug tests.
+
 ## Performance work
 
 Performance claims must come from benchmarks, with hardware stated. Use the release preset:

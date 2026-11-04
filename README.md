@@ -208,6 +208,11 @@ ctest --preset debug
 ./build/debug/bin/sandbox          # optional: sprite count, e.g. 10000
 ```
 
+For code, shader, test, or build changes, build the debug preset and run
+`ctest --preset debug --output-on-failure` before committing. Rendering changes also need
+a debug sandbox check when a display and GPU are available. Documentation-only changes
+do not require rerunning tests. See [AGENTS.md](AGENTS.md) for the verification workflow.
+
 On Ubuntu 24.04, install GCC 14, Ninja, `glslc`, `spirv-cross`, and SDL's X11 development
 libraries ([SDL's Linux build dependencies](https://wiki.libsdl.org/SDL3/README-linux)).
 Then configure with `CC=gcc-14 CXX=g++-14 cmake --preset debug` and run the build and test
