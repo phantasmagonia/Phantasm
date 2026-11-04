@@ -87,6 +87,49 @@ TileMap TileMap::parse(std::string_view text) {
     return map;
 }
 
+TileMap TileMap::blank(int width, int height, int levels) {
+    if (width <= 0 || height <= 0 || levels <= 0) {
+        throw std::invalid_argument("Map dimensions and level count must be positive");
+    }
+    TileMap map;
+    map.width_ = width;
+    map.height_ = height;
+    map.levels_.resize(static_cast<std::size_t>(levels),
+                       std::vector<std::string>(static_cast<std::size_t>(height),
+                                                std::string(static_cast<std::size_t>(width), kEmpty)));
+    return map;
+}
+
+std::string TileMap::serialize() const {
+    if (levels_.empty()) {
+        throw std::runtime_error("Cannot serialize an empty map");
+    }
+    std::string text;
+    for (int level = 0; level < level_count(); ++level) {
+        text += "level " + std::to_string(level) + '\n';
+        for (const std::string& row : levels_[static_cast<std::size_t>(level)]) {
+            if (row.starts_with(kLevelHeader)) {
+                throw std::runtime_error("Tile row begins with reserved 'level ' header");
+            }
+            text += row;
+            text += '\n';
+        }
+    }
+    return text;
+}
+
+void TileMap::set(TileCoord tile, char value) {
+    if (tile.level < 0 || tile.level >= level_count() || tile.x < 0 || tile.x >= width_ ||
+        tile.y < 0 || tile.y >= height_) {
+        throw std::out_of_range("Tile coordinate outside map");
+    }
+    if (value == '\n' || value == '\r') {
+        throw std::invalid_argument("Tile character cannot be a line break");
+    }
+    levels_[static_cast<std::size_t>(tile.level)][static_cast<std::size_t>(tile.y)]
+           [static_cast<std::size_t>(tile.x)] = value;
+}
+
 char TileMap::at(TileCoord tile) const noexcept {
     if (tile.level < 0 || tile.level >= level_count() || tile.x < 0 || tile.x >= width_ ||
         tile.y < 0 || tile.y >= height_) {

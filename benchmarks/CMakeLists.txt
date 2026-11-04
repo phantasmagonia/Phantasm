@@ -3,6 +3,7 @@ add_executable(phantasm_benchmarks
     entity_store_bench.cpp
     iso_bench.cpp
     iso_prepare_bench.cpp
+    scene_bench.cpp
     sprite_batch_bench.cpp
     world_update_bench.cpp
 )

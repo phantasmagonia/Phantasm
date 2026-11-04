@@ -18,6 +18,7 @@ add_executable(phantasm_tests
     sort_key_tests.cpp
     task_pool_tests.cpp
     sprite_tests.cpp
+    scene_tests.cpp
     tile_map_tests.cpp
 )
 target_link_libraries(phantasm_tests PRIVATE phantasm_iso Catch2::Catch2WithMain phantasm_warnings)

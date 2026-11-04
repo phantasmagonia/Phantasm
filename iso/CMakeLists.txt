@@ -1,5 +1,6 @@
 add_library(phantasm_iso
     src/iso_grid.cpp
+    src/scene.cpp
     src/tile_map.cpp
 )
 add_library(phantasm::iso ALIAS phantasm_iso)

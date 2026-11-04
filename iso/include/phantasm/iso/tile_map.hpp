@@ -22,6 +22,8 @@ public:
 
     // Throws std::runtime_error (with the line number) on malformed input.
     [[nodiscard]] static TileMap parse(std::string_view text);
+    [[nodiscard]] static TileMap blank(int width, int height, int levels);
+    [[nodiscard]] std::string serialize() const;
 
     [[nodiscard]] int width() const noexcept { return width_; }
     [[nodiscard]] int height() const noexcept { return height_; }
@@ -29,6 +31,7 @@ public:
 
     // Returns kEmpty outside the map.
     [[nodiscard]] char at(TileCoord tile) const noexcept;
+    void set(TileCoord tile, char value);
     [[nodiscard]] std::vector<TileCoord> find(char tile) const;
 
 private:

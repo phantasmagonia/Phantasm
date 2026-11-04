@@ -311,6 +311,8 @@ Implemented and tested:
   to the caller.
 - **Entities:** packed component columns grouped by archetype, generational handles, bulk
   iteration, and a sidecar for frequently toggled flags.
+- **Scene files:** editable multi-level tile maps and named scene objects with persistent IDs;
+  versioned text save/load built on the entity store.
 - **Physics (`phantasm_physics`, opt-in):** Box2D v3 rigid bodies (boxes, circles, static /
   kinematic / dynamic, gravity or top-down), in engine world units, with handles that stay safe
   after a body is destroyed. Collision filters (category/mask), sensors with enter/leave events,
@@ -403,8 +405,19 @@ frequently toggled booleans. Include `<phantasm/entity_store.hpp>`; components m
 move construction and move assignment without throwing. `each` and `each_chunk` provide
 mutable or const iteration. Adding, removing, or destroying components can move them, so
 component pointers and spans must not be kept across structural changes. Structural edits
-inside iteration callbacks are rejected. Runtime handles are generational; persistent IDs
-and scene save/load are still to be implemented.
+inside iteration callbacks are rejected. Runtime handles are generational.
+
+`phantasm::iso::Scene` stores named objects with persistent 64-bit IDs and grid positions in
+the entity store. `Scene::save_file` and `Scene::load_file` round-trip them with an editable
+multi-level `TileMap`; IDs remain stable after deletion and reload. Use `object(id)` to edit a
+name or position, `map().set(...)` to paint a tile, and `serialize()` / `parse()` for in-memory
+storage. The current format saves scene-owned object fields only; game-specific components,
+textures, and other assets need their own persistence layer. The scene format is version 1;
+unknown versions are rejected.
+
+On a MacBook Air M1 (8 GB), a release benchmark with a 160×160 two-level map and 10,000
+named objects measured **5.48 ms** to serialize and **7.53 ms** to parse in memory. File I/O is
+excluded. Reproduce with `./build/release/bin/phantasm_benchmarks --benchmark_filter='BM_Scene(Serialize|Parse)'`.
 
 For a large world, keep objects in game-owned storage and index their world bounds. Keep an
 entity's spatial index entry in sync when its position changes, then submit only IDs returned
