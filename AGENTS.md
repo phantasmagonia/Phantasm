@@ -55,6 +55,33 @@ Open architecture decisions (benchmark before choosing): entity storage (EnTT vs
 archetype store), job system with dependencies, render graph for lighting/fog passes,
 asset pipeline with async loading by handle.
 
+Apply these checks when designing or reviewing a subsystem:
+
+- **Entity storage:** compare EnTT and an archetype prototype on representative isometric
+  workloads before adopting a storage model or dependency. Measure bulk iteration, entity
+  creation/destruction, component changes, memory use, and integration cost. Contiguous storage
+  improves locality; it does not eliminate cache misses by itself.
+- **Resource references:** validate generational handles on lookup and test stale references
+  after slot reuse. Define ownership and lifetime for textures, entities, and resident chunks.
+  Saves and networking need persistent IDs mapped to runtime handles.
+- **Scheduling:** evaluate task dependencies and work stealing before multiple subsystems
+  rely on cross-system parallel execution. The current blocking `parallel_for` is not a
+  dependency scheduler; do not nest calls on the same pool.
+- **Memory:** measure allocations in frame loops before claiming allocation-free behavior.
+  Frame and pool storage must have explicit lifetimes, including tasks that outlive a frame.
+- **World precision:** evaluate chunk-local simulation and camera-relative rendering before
+  expanding world coordinates. Test distant positions and chunk boundaries, including physics
+  queries and rendering conversions.
+- **Simulation:** keep fixed simulation steps separate from rendering and use previous/current
+  state with `FixedStep::alpha()` for interpolation where needed. Fixed steps alone do not
+  guarantee deterministic physics, replays, or lockstep networking; verify those separately.
+- **Rendering and assets:** declare pass inputs, outputs, and resource lifetimes when adding
+  lighting, fog, or post-processing. Asset loading must distinguish CPU preparation from GPU
+  upload and publish results through validated handles. GPU culling/sorting requires measured
+  evidence that the CPU path is a bottleneck.
+- **Profiling:** expose useful per-system timings alongside frame/render statistics. Record
+  hardware, workload, and measurement boundaries for every performance comparison.
+
 ## Layout and dependency rules
 
 - `engine/` → library `phantasm` (core). Must never depend on `iso/` or any game.
