@@ -321,7 +321,7 @@ private:
     void erase_row(Archetype& archetype, std::size_t row) noexcept {
         const std::size_t last = archetype.entities.size() - 1;
         if (row != last) {
-            slots_[archetype.entities[last].index].row = row;
+            slots_[archetype.entities[last].index].row = static_cast<std::uint32_t>(row);
             archetype.entities[row] = archetype.entities[last];
         }
         archetype.entities.pop_back();
