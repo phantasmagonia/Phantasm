@@ -100,6 +100,22 @@ bool radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>&
     return moved;
 }
 
+SpriteInstance pack_instance(Rect rect, Rect uv, Color tint) noexcept {
+    // Add 0.5 and truncate: rounds like lround for these non-negative values, but
+    // compiles to a few instructions instead of a library call per channel.
+    const auto unorm16 = [](float value) {
+        return static_cast<std::uint16_t>(std::clamp(value, 0.0F, 1.0F) * 65535.0F + 0.5F);
+    };
+    const auto unorm8 = [](float value) {
+        return static_cast<std::uint8_t>(std::clamp(value, 0.0F, 1.0F) * 255.0F + 0.5F);
+    };
+    return SpriteInstance{
+        .rect = rect,
+        .uv = {unorm16(uv.x), unorm16(uv.y), unorm16(uv.w), unorm16(uv.h)},
+        .tint = {unorm8(tint.r), unorm8(tint.g), unorm8(tint.b), unorm8(tint.a)},
+    };
+}
+
 void SpriteQueue::clear() noexcept {
     keys_.clear();
     instances_.clear();

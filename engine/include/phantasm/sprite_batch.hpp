@@ -13,12 +13,16 @@ namespace phantasm {
 class Texture;
 
 // Per-sprite instance data, read by the vertex shader as vertex attributes.
+// Packed to 32 bytes: less memory traffic when sorting and uploading every frame.
 struct SpriteInstance {
-    Rect rect;  // world space
-    Rect uv;
-    Color tint;
+    Rect rect;                    // world space, full precision
+    std::uint16_t uv[4] = {};     // u, v, w, h as 16-bit unsigned normalized
+    std::uint8_t tint[4] = {};    // r, g, b, a as 8-bit unsigned normalized
+    std::uint32_t padding = 0;
 };
-static_assert(sizeof(SpriteInstance) == 48);
+
+// Builds an instance; uv and tint are clamped to [0, 1] and quantized.
+[[nodiscard]] SpriteInstance pack_instance(Rect rect, Rect uv, Color tint) noexcept;
 
 // A contiguous range of sorted sprites sharing one texture: one draw call.
 struct DrawRun {

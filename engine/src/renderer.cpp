@@ -193,9 +193,10 @@ void Renderer::create_sprite_pipeline() {
         .instance_step_rate = 0,
     };
     const std::array<SDL_GPUVertexAttribute, 3> attributes{{
+        // Normalized formats: the GPU expands 16/8-bit integers to floats in [0, 1].
         {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SpriteInstance, rect)},
-        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SpriteInstance, uv)},
-        {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SpriteInstance, tint)},
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_USHORT4_NORM, offsetof(SpriteInstance, uv)},
+        {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(SpriteInstance, tint)},
     }};
 
     SDL_GPUGraphicsPipelineCreateInfo pipeline{};
@@ -412,7 +413,7 @@ void Renderer::draw_sprite(const Texture& texture, const Sprite& sprite) {
         return;
     }
     queue_.push(texture, sprite.layer, sprite.depth,
-                SpriteInstance{world_rect, sprite.uv, sprite.tint});
+                pack_instance(world_rect, sprite.uv, sprite.tint));
 }
 
 void Renderer::upload_instances() {

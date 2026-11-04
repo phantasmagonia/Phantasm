@@ -116,3 +116,35 @@ TEST_CASE("Clearing empties the queue for the next frame") {
 
     CHECK(sorted_markers(queue) == std::vector<float>{9});
 }
+
+TEST_CASE("Packed sprite instances take 32 bytes") {
+    STATIC_REQUIRE(sizeof(SpriteInstance) == 32);
+}
+
+TEST_CASE("Packing keeps the rect exact and quantizes uv and tint") {
+    const auto instance = phantasm::pack_instance(phantasm::Rect{1.5F, -2.25F, 64.0F, 32.0F},
+                                                  phantasm::Rect{0.0F, 0.5F, 1.0F, 0.25F},
+                                                  phantasm::Color{1.0F, 0.5F, 0.0F, 1.0F});
+
+    CHECK(instance.rect.x == 1.5F);
+    CHECK(instance.rect.h == 32.0F);
+    CHECK(instance.uv[0] == 0);
+    CHECK(instance.uv[1] == 32768);
+    CHECK(instance.uv[2] == 65535);
+    CHECK(instance.uv[3] == 16384);
+    CHECK(instance.tint[0] == 255);
+    CHECK(instance.tint[1] == 128);
+    CHECK(instance.tint[2] == 0);
+    CHECK(instance.tint[3] == 255);
+}
+
+TEST_CASE("Out-of-range uv and tint values are clamped") {
+    const auto instance = phantasm::pack_instance(phantasm::Rect{},
+                                                  phantasm::Rect{-0.5F, 2.0F, 0.0F, 0.0F},
+                                                  phantasm::Color{-1.0F, 3.0F, 0.0F, 0.0F});
+
+    CHECK(instance.uv[0] == 0);
+    CHECK(instance.uv[1] == 65535);
+    CHECK(instance.tint[0] == 0);
+    CHECK(instance.tint[1] == 255);
+}
