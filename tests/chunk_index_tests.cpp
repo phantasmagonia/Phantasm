@@ -54,3 +54,24 @@ TEST_CASE("Chunk index rejects invalid geometry") {
     CHECK_THROWS_AS(index.upsert(1, Rect{0, 0, 0, 5}), std::invalid_argument);
     CHECK(index.query(Rect{0, 0, 0, 5}).empty());
 }
+
+TEST_CASE("Chunk index rejects unsupported coordinates without losing objects") {
+    ChunkIndex index{32.0F};
+    index.upsert(1, Rect{0, 0, 8, 8});
+    const Rect distant{1.0e30F, 1.0e30F, 8, 8};
+
+    CHECK_THROWS_AS(index.upsert(1, distant), std::invalid_argument);
+    CHECK(index.size() == 1);
+    CHECK(index.query(Rect{0, 0, 32, 32}) == std::vector<std::uint32_t>{1});
+    CHECK_THROWS_AS(index.query(distant), std::invalid_argument);
+}
+
+TEST_CASE("Chunk index bounds the chunks visited by one operation") {
+    ChunkIndex index{1.0F};
+    index.upsert(1, Rect{0, 0, 1, 1});
+    const Rect oversized{-1000, -1000, 2000, 2000};
+
+    CHECK_THROWS_AS(index.upsert(1, oversized), std::length_error);
+    CHECK(index.query(Rect{0, 0, 1, 1}) == std::vector<std::uint32_t>{1});
+    CHECK_THROWS_AS(index.query(oversized), std::length_error);
+}

@@ -14,6 +14,7 @@ class ChunkIndex {
 public:
     explicit ChunkIndex(float chunk_size);
 
+    // Operations reject unsupported coordinates and spans over 1,000,000 chunks.
     void upsert(std::uint32_t id, Rect bounds);
     [[nodiscard]] bool erase(std::uint32_t id);
     [[nodiscard]] std::vector<std::uint32_t> query(Rect view) const;

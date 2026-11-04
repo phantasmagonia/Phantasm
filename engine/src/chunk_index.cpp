@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -14,6 +15,23 @@ bool valid(Rect rect) noexcept {
            std::isfinite(rect.h) && rect.w > 0.0F && rect.h > 0.0F &&
            std::isfinite(static_cast<double>(rect.x) + rect.w) &&
            std::isfinite(static_cast<double>(rect.y) + rect.h);
+}
+
+void validate_chunk_range(Rect rect, float chunk_size) {
+    const double left = static_cast<double>(rect.x) / chunk_size;
+    const double top = static_cast<double>(rect.y) / chunk_size;
+    const double right = (static_cast<double>(rect.x) + rect.w) / chunk_size;
+    const double bottom = (static_cast<double>(rect.y) + rect.h) / chunk_size;
+    const double limit = static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 4.0;
+    if (std::abs(left) >= limit || std::abs(top) >= limit ||
+        std::abs(right) >= limit || std::abs(bottom) >= limit) {
+        throw std::invalid_argument("bounds are outside supported chunk coordinates");
+    }
+    const double columns = std::ceil(right) - std::floor(left);
+    const double rows = std::ceil(bottom) - std::floor(top);
+    if (columns * rows > 1'000'000.0) {
+        throw std::length_error("bounds span too many chunks");
+    }
 }
 
 } // namespace
@@ -68,6 +86,7 @@ void ChunkIndex::upsert(std::uint32_t id, Rect bounds) {
     if (!valid(bounds)) {
         throw std::invalid_argument("object bounds must have positive finite area");
     }
+    validate_chunk_range(bounds, chunk_size_);
     if (auto old = objects_.find(id); old != objects_.end()) {
         remove_from_chunks(id, old->second);
     }
@@ -96,6 +115,7 @@ std::vector<std::uint32_t> ChunkIndex::query(Rect view) const {
     if (!valid(view)) {
         return result;
     }
+    validate_chunk_range(view, chunk_size_);
     std::unordered_set<std::uint32_t> seen;
     const auto first = first_chunk(view);
     const auto last = last_chunk(view);
