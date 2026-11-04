@@ -197,14 +197,14 @@ beating.
 
 | Sprites | Scenario | **Phantasm** | SFML | SDL_Renderer | raylib | Lead over best rival |
 |---:|---|---:|---:|---:|---:|---:|
-| 10,000 | y-sorted | **0.24** | 0.82 | 0.92 | 0.95 | 3.4x |
-| 50,000 | y-sorted | **1.20** | 2.92 | 5.39 | 5.16 | 2.4x |
-| 100,000 | y-sorted | **2.62** | 6.41 | 10.57 | 10.44 | 2.4x |
-| 200,000 | y-sorted | **6.63** | 11.62 | 21.59 | 21.33 | 1.8x |
-| 10,000 | plain | **0.20** | 0.92 | 0.71 | 0.80 | 3.5x |
-| 50,000 | plain | **0.88** | 1.95 | 3.69 | 3.50 | 2.2x |
-| 100,000 | plain | **2.19** | 3.68 | 7.24 | 6.93 | 1.7x |
-| 200,000 | plain | **4.54** | 6.72 | 14.23 | 13.69 | 1.5x |
+| 10,000 | y-sorted | **0.24** | 0.84 | 0.91 | 0.93 | 3.5x |
+| 50,000 | y-sorted | **1.16** | 2.88 | 5.12 | 4.89 | 2.5x |
+| 100,000 | y-sorted | **2.43** | 5.65 | 10.62 | 10.29 | 2.3x |
+| 200,000 | y-sorted | **5.54** | 11.72 | 21.73 | 21.46 | 2.1x |
+| 10,000 | plain | **0.20** | 0.71 | 0.72 | 0.71 | 3.6x |
+| 50,000 | plain | **0.88** | 1.94 | 3.57 | 3.46 | 2.2x |
+| 100,000 | plain | **1.81** | 3.26 | 7.28 | 6.86 | 1.8x |
+| 200,000 | plain | **3.74** | 6.72 | 14.66 | 14.15 | 1.8x |
 
 **In a window** (wall-clock, including presentation), results depend on the OS: on macOS the
 compositor intermittently throttles Metal presentation (Phantasm, SDL_Renderer) to 120 fps and
