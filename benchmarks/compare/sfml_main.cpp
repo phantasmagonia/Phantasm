@@ -23,6 +23,23 @@ void fill_vertices(sf::VertexArray& vertices, const std::vector<compare::Sprite>
     }
 }
 
+void put_quad(sf::VertexArray& vertices, std::size_t quad, const compare::IsoSprite& s) {
+    const float x = s.x;
+    const float y = s.y;
+    const float w = s.region.w;
+    const float h = s.region.h;
+    const float u = s.region.u;
+    const float v = s.region.v;
+    const sf::Vector2f corners[6] = {{x, y}, {x + w, y}, {x, y + h},
+                                     {x + w, y}, {x + w, y + h}, {x, y + h}};
+    const sf::Vector2f uvs[6] = {{u, v}, {u + w, v}, {u, v + h},
+                                 {u + w, v}, {u + w, v + h}, {u, v + h}};
+    for (std::size_t i = 0; i < 6; ++i) {
+        vertices[quad * 6 + i].position = corners[i];
+        vertices[quad * 6 + i].texCoords = uvs[i];
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -43,9 +60,16 @@ int main(int argc, char** argv) {
     const auto pixels = compare::blob_pixels();
     const sf::Image image{{compare::kSpriteSize, compare::kSpriteSize}, pixels.data()};
     const sf::Texture texture{image};
-    auto sprites = compare::make_sprites(options.count);
+    auto sprites = options.iso ? std::vector<compare::Sprite>{} : compare::make_sprites(options.count);
     // One vertex array drawn in a single call: SFML's recommended fast path.
-    sf::VertexArray vertices{sf::PrimitiveType::Triangles, options.count * 6};
+    sf::VertexArray vertices{sf::PrimitiveType::Triangles, options.iso ? 0 : options.count * 6};
+    std::optional<compare::IsoScene> iso;
+    std::optional<sf::Texture> atlas;
+    if (options.iso) {
+        iso.emplace(options.count);
+        const auto atlas_pixels = compare::iso_atlas_pixels();
+        atlas.emplace(sf::Image{{compare::kAtlasW, compare::kAtlasH}, atlas_pixels.data()});
+    }
     compare::FrameTimer timer;
 
     while (timer.tick()) {
@@ -56,13 +80,28 @@ int main(int argc, char** argv) {
                 }
             }
         }
-        compare::update(sprites, timer.dt());
-        if (options.sorted) {
-            compare::sort_by_y(sprites);
-        }
-        fill_vertices(vertices, sprites);
         target.clear(sf::Color{20, 22, 28});
-        target.draw(vertices, &texture);
+        if (iso) {
+            iso->update(timer.dt());
+            const auto& floors = iso->floors();
+            const auto& objects = iso->objects(true);
+            vertices.resize((floors.size() + objects.size()) * 6);
+            std::size_t quad = 0;
+            for (const auto& floor : floors) {
+                put_quad(vertices, quad++, floor);
+            }
+            for (const auto& object : objects) {
+                put_quad(vertices, quad++, object);
+            }
+            target.draw(vertices, &*atlas);
+        } else {
+            compare::update(sprites, timer.dt());
+            if (options.sorted) {
+                compare::sort_by_y(sprites);
+            }
+            fill_vertices(vertices, sprites);
+            target.draw(vertices, &texture);
+        }
         if (offscreen) {
             offscreen->display();
         } else {

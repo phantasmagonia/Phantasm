@@ -36,6 +36,25 @@ cmake --preset release && cmake --build --preset release
 
 Measure before and after every optimization; include both numbers in the commit message.
 
+## Scale principles
+
+Phantasm targets large isometric games. New code must not cap what a big game can do:
+
+- **Data-oriented:** hot data in contiguous arrays, processed in bulk; no per-object virtual
+  calls or pointer chasing in per-frame loops.
+- **Handles, not pointers,** for engine-owned objects that can be destroyed (generational ids).
+- **No per-frame heap churn** in hot paths: reuse buffers; prefer frame/pool allocation.
+- **Parallel by design:** systems expose work that can run on the task pool; no hidden global
+  mutable state.
+- **Proportional to what's visible or active,** not to world size (chunks, culling, streaming).
+- **Large worlds:** keep precision in mind (chunk-local or camera-relative coordinates for far
+  positions).
+- **Measured:** every scale claim backed by a benchmark at large counts.
+
+Open architecture decisions (benchmark before choosing): entity storage (EnTT vs. own
+archetype store), job system with dependencies, render graph for lighting/fog passes,
+asset pipeline with async loading by handle.
+
 ## Layout and dependency rules
 
 - `engine/` → library `phantasm` (core). Must never depend on `iso/` or any game.
