@@ -186,37 +186,35 @@ Close other apps first; background load skews results.
 
 **Comparison with other engines** (`benchmarks/compare`): the same workload on each engine,
 using its recommended fast path (raylib 6.2 `DrawTextureV`, SFML 3.1 one `VertexArray`, SDL 3.4
-`SDL_RenderTexture`). N moving 16×16 sprites, one texture, 1280×720, vsync off. MacBook Air
-M1 (8 GB), release, typical (p50) frame time, median of 3 interleaved runs. *Y-sorted* means
-sprites must be drawn in y order every frame, as in isometric games; engines without
-built-in depth sorting call `std::sort` each frame.
+`SDL_RenderTexture`). N moving 16×16 sprites, one texture, 1280×720. *Y-sorted* means sprites
+are drawn in y order every frame, as in isometric games; engines without built-in depth
+sorting call `std::sort` each frame.
 
-| Sprites | Scenario | **Phantasm** | SFML | SDL_Renderer | raylib |
-|---:|---|---:|---:|---:|---:|
-| 10,000 | y-sorted | 1.09 ms | **0.61 ms** | 1.18 ms | 1.79 ms |
-| 50,000 | y-sorted | **2.09 ms** | 2.77 ms | 5.04 ms | 7.79 ms |
-| 100,000 | y-sorted | **3.10 ms** | 5.93 ms | 10.44 ms | 15.91 ms |
-| 200,000 | y-sorted | **7.85 ms** | 12.34 ms | 21.45 ms | 30.58 ms |
-| 10,000 | plain | 0.93 ms | **0.40 ms** | 1.47 ms | 1.62 ms |
-| 100,000 | plain | 3.13 ms | **2.46 ms** | 7.07 ms | 11.00 ms |
-| 200,000 | plain | 6.83 ms | **5.25 ms** | 13.76 ms | 18.76 ms |
+**Offscreen throughput** (primary result): each engine renders into its own render texture,
+nothing is presented, and time includes waiting for the GPU to finish. MacBook Air M1 (8 GB),
+release, ms per frame, median of 3 interleaved runs. These are the targets Phantasm must keep
+beating.
 
-Where Phantasm stands today: **fastest for y-sorted (isometric) scenes from 50k sprites up**
-(1.6x SFML, 2.7x SDL_Renderer, 3.9x raylib at 200k); **second to SFML** for plain scenes and
-small counts.
+| Sprites | Scenario | **Phantasm** | SFML | SDL_Renderer | raylib | Lead over best rival |
+|---:|---|---:|---:|---:|---:|---:|
+| 10,000 | y-sorted | **0.24** | 0.82 | 0.92 | 0.95 | 3.4x |
+| 50,000 | y-sorted | **1.20** | 2.92 | 5.39 | 5.16 | 2.4x |
+| 100,000 | y-sorted | **2.62** | 6.41 | 10.57 | 10.44 | 2.4x |
+| 200,000 | y-sorted | **6.63** | 11.62 | 21.59 | 21.33 | 1.8x |
+| 10,000 | plain | **0.20** | 0.92 | 0.71 | 0.80 | 3.5x |
+| 50,000 | plain | **0.88** | 1.95 | 3.69 | 3.50 | 2.2x |
+| 100,000 | plain | **2.19** | 3.68 | 7.24 | 6.93 | 1.7x |
+| 200,000 | plain | **4.54** | 6.72 | 14.23 | 13.69 | 1.5x |
 
-> **Caveat: these are wall-clock times, including presenting to the screen.** On macOS, the
-> window compositor sometimes throttles Metal presentation (Phantasm and SDL_Renderer) to
-> 120 fps even with vsync off, while the OpenGL engines (raylib, SFML) are unaffected. Repeat
-> runs of the same build can therefore differ: in later runs Phantasm was held at exactly
-> 8.33 ms per frame at every sprite count. The ~17 ms p99 spikes seen for both Metal engines
-> are likely the same effect. A presentation-independent mode (offscreen rendering) is planned
-> so the comparison measures engine work only.
-Reproduce with:
+**In a window** (wall-clock, including presentation), results depend on the OS: on macOS the
+compositor intermittently throttles Metal presentation (Phantasm, SDL_Renderer) to 120 fps and
+adds ~17 ms stalls, while OpenGL engines are unaffected, so window-mode numbers vary between
+runs and mostly measure presentation. Offscreen numbers measure engine work.
 
 ```sh
 cmake -S benchmarks/compare -B build/compare -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build/compare && benchmarks/compare/run.sh build/compare
+cmake --build build/compare
+benchmarks/compare/run.sh build/compare offscreen   # or: window
 ```
 
 **Physics** (`phantasm_benchmarks`, MacBook Air M1 8 GB, release, single-threaded Box2D,

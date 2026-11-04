@@ -37,3 +37,7 @@ target_link_libraries(compare_sfml PRIVATE SFML::Graphics)
 
 add_executable(compare_sdl_renderer sdl_renderer_main.cpp)
 target_link_libraries(compare_sdl_renderer PRIVATE SDL3::SDL3)
+
+# OpenGL is deprecated on macOS but is what raylib and SFML use there.
+target_compile_definitions(compare_raylib PRIVATE GL_SILENCE_DEPRECATION)
+target_compile_definitions(compare_sfml PRIVATE GL_SILENCE_DEPRECATION)

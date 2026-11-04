@@ -13,16 +13,20 @@ class Bench final : public phantasm::Application {
 public:
     explicit Bench(compare::Options options)
         : Application{{.title = "Phantasm", .width = compare::kWindowWidth,
-                       .height = compare::kWindowHeight}},
+                       .height = compare::kWindowHeight, .hidden = options.offscreen}},
           options_{options}, sprites_{compare::make_sprites(options.count)},
           texture_{make_texture()} {
         renderer().set_vsync(false);
+        if (options.offscreen) {
+            renderer().set_offscreen(compare::kWindowWidth, compare::kWindowHeight);
+        }
         // Camera centered on the window so world units equal screen pixels.
         renderer().set_camera({.position = {compare::kWindowWidth / 2.0F,
                                             compare::kWindowHeight / 2.0F}});
     }
 
-    const compare::FrameTimer& timer() const { return timer_; }
+    compare::FrameTimer& timer() { return timer_; }
+    void wait_for_gpu() { renderer().wait_idle(); }
 
 protected:
     void on_update(double) override {
@@ -61,5 +65,7 @@ int main(int argc, char** argv) {
     const auto options = compare::parse(argc, argv);
     Bench bench{options};
     bench.run();
+    bench.wait_for_gpu();
+    bench.timer().finish();
     bench.timer().report("phantasm", options);
 }

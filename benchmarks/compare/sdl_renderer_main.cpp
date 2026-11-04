@@ -7,8 +7,8 @@ int main(int argc, char** argv) {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
-    SDL_CreateWindowAndRenderer("SDL_Renderer", compare::kWindowWidth, compare::kWindowHeight, 0,
-                                &window, &renderer);
+    SDL_CreateWindowAndRenderer("SDL_Renderer", compare::kWindowWidth, compare::kWindowHeight,
+                                options.offscreen ? SDL_WINDOW_HIDDEN : 0, &window, &renderer);
     SDL_SetRenderVSync(renderer, 0);
 
     const auto pixels = compare::blob_pixels();
@@ -18,6 +18,12 @@ int main(int argc, char** argv) {
     SDL_UpdateTexture(texture, nullptr, pixels.data(), compare::kSpriteSize * 4);
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+    SDL_Texture* offscreen = nullptr;
+    if (options.offscreen) {
+        offscreen = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET,
+                                      compare::kWindowWidth, compare::kWindowHeight);
+        SDL_SetRenderTarget(renderer, offscreen);
+    }
     auto sprites = compare::make_sprites(options.count);
     compare::FrameTimer timer;
 
@@ -37,7 +43,18 @@ int main(int argc, char** argv) {
             const SDL_FRect target{s.x, s.y, compare::kSpriteSize, compare::kSpriteSize};
             SDL_RenderTexture(renderer, texture, nullptr, &target); // batched internally
         }
-        SDL_RenderPresent(renderer);
+        if (offscreen != nullptr) {
+            SDL_FlushRenderer(renderer);
+        } else {
+            SDL_RenderPresent(renderer);
+        }
+    }
+    // Reading a pixel back waits for all queued GPU work.
+    const SDL_Rect one_pixel{0, 0, 1, 1};
+    SDL_DestroySurface(SDL_RenderReadPixels(renderer, &one_pixel));
+    timer.finish();
+    if (offscreen != nullptr) {
+        SDL_DestroyTexture(offscreen);
     }
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);

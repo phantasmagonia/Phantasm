@@ -31,7 +31,8 @@ struct Sprite {
 
 struct Options {
     std::size_t count = 10'000;
-    bool sorted = false; // y-sorted draw order every frame (isometric case)
+    bool sorted = false;    // y-sorted draw order every frame (isometric case)
+    bool offscreen = false; // render into a texture; nothing is presented to the screen
 };
 
 inline Options parse(int argc, char** argv) {
@@ -41,6 +42,9 @@ inline Options parse(int argc, char** argv) {
     }
     if (argc > 2) {
         options.sorted = std::string_view{argv[2]} == "sorted";
+    }
+    if (argc > 3) {
+        options.offscreen = std::string_view{argv[3]} == "offscreen";
     }
     return options;
 }
@@ -105,6 +109,9 @@ public:
     // Returns true while more frames should run.
     bool tick() {
         const auto now = std::chrono::steady_clock::now();
+        if (frame_ == kWarmupFrames) {
+            measure_start_ = now;
+        }
         if (frame_ > 0 && frame_ > kWarmupFrames) {
             samples_.push_back(std::chrono::duration<double, std::milli>(now - last_).count());
         }
@@ -112,6 +119,9 @@ public:
         ++frame_;
         return frame_ <= kWarmupFrames + kMeasuredFrames + 1;
     }
+
+    // Call after waiting for the GPU to finish all frames.
+    void finish() { measure_end_ = std::chrono::steady_clock::now(); }
 
     [[nodiscard]] float dt() const { return 1.0F / 60.0F; } // fixed so all engines move alike
 
@@ -126,15 +136,21 @@ public:
             const auto r = static_cast<std::size_t>(std::ceil(p / 100.0 * sorted.size()));
             return sorted[std::clamp<std::size_t>(r, 1, sorted.size()) - 1];
         };
-        std::printf("%.*s,%s,%zu,%zu,%.3f,%.3f,%.3f\n", static_cast<int>(engine.size()),
-                    engine.data(), options.sorted ? "sorted" : "plain", options.count,
-                    sorted.size(), sum / static_cast<double>(sorted.size()), rank(50.0),
-                    rank(99.0));
+        // Throughput: measured frames plus the final GPU wait, divided by frame count.
+        const double throughput =
+            std::chrono::duration<double, std::milli>(measure_end_ - measure_start_).count() /
+            static_cast<double>(sorted.size());
+        std::printf("%.*s,%s,%s,%zu,%zu,%.3f,%.3f,%.3f,%.3f\n", static_cast<int>(engine.size()),
+                    engine.data(), options.sorted ? "sorted" : "plain",
+                    options.offscreen ? "offscreen" : "window", options.count, sorted.size(),
+                    sum / static_cast<double>(sorted.size()), rank(50.0), rank(99.0), throughput);
         std::fflush(stdout);
     }
 
 private:
     std::chrono::steady_clock::time_point last_{};
+    std::chrono::steady_clock::time_point measure_start_{};
+    std::chrono::steady_clock::time_point measure_end_{};
     int frame_ = 0;
     std::vector<double> samples_;
 };
