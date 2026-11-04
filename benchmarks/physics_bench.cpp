@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <memory>
 #include <random>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -99,9 +101,45 @@ void BM_PhysicsPileCollapse(benchmark::State& state) {
     state.counters["bodies"] = static_cast<double>(count);
 }
 
+// Line-of-sight workload: a grid of wall blocks and many rays from random points.
+void BM_PhysicsRaycast(benchmark::State& state) {
+    constexpr int kGrid = 100; // 10,000 static wall blocks
+    constexpr float kSpacing = 64.0F;
+    World world{WorldConfig{.units_per_meter = kUnitsPerMeter}};
+    for (int y = 0; y < kGrid; ++y) {
+        for (int x = 0; x < kGrid; ++x) {
+            const auto wall = world.create_body(BodyDef{
+                .type = BodyType::Static,
+                .position = {static_cast<float>(x) * kSpacing, static_cast<float>(y) * kSpacing}});
+            world.add_box(wall, Box{.half_extents = {12.0F, 12.0F}});
+        }
+    }
+    world.step(kStep); // build the broad-phase tree
+
+    const auto ray_count = static_cast<std::size_t>(state.range(0));
+    std::mt19937 rng{5};
+    std::uniform_real_distribution<float> coord{0.0F, kGrid * kSpacing};
+    std::uniform_real_distribution<float> offset{-320.0F, 320.0F}; // ~5 tiles of sight
+    std::vector<std::pair<phantasm::Vec2, phantasm::Vec2>> rays(ray_count);
+    for (auto& [from, to] : rays) {
+        from = {coord(rng), coord(rng)};
+        to = {from.x + offset(rng), from.y + offset(rng)};
+    }
+
+    for (auto _ : state) {
+        int hits = 0;
+        for (const auto& [from, to] : rays) {
+            hits += world.raycast(from, to).has_value() ? 1 : 0;
+        }
+        benchmark::DoNotOptimize(hits);
+    }
+    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(ray_count));
+}
+
 } // namespace
 
 BENCHMARK(BM_PhysicsStep_TopDown)->Arg(1'000)->Arg(5'000)->Arg(10'000)->Arg(20'000)
     ->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_PhysicsPileCollapse)->Arg(1'000)->Arg(5'000)->Arg(10'000)
     ->Unit(benchmark::kMillisecond)->Iterations(5);
+BENCHMARK(BM_PhysicsRaycast)->Arg(1'000)->Arg(10'000)->Unit(benchmark::kMillisecond);

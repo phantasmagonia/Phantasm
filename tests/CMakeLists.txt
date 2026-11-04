@@ -20,7 +20,7 @@ add_executable(phantasm_tests
 target_link_libraries(phantasm_tests PRIVATE phantasm_iso Catch2::Catch2WithMain phantasm_warnings)
 
 if(PHANTASM_BUILD_PHYSICS)
-    target_sources(phantasm_tests PRIVATE physics_world_tests.cpp)
+    target_sources(phantasm_tests PRIVATE physics_query_tests.cpp physics_world_tests.cpp)
     target_link_libraries(phantasm_tests PRIVATE phantasm_physics)
 endif()
 
