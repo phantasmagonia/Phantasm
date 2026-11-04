@@ -41,7 +41,7 @@ if(PHANTASM_BUILD_EDITOR)
     )
     target_include_directories(phantasm_imgui SYSTEM PUBLIC
         "${imgui_SOURCE_DIR}" "${imgui_SOURCE_DIR}/backends")
-    target_link_libraries(phantasm_imgui PRIVATE SDL3::SDL3)
+    target_link_libraries(phantasm_imgui PUBLIC SDL3::SDL3)
 endif()
 
 if(PHANTASM_BUILD_PHYSICS)
