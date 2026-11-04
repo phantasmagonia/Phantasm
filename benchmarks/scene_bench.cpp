@@ -1,4 +1,5 @@
 #include <phantasm/iso/scene.hpp>
+#include <phantasm/iso/scene_history.hpp>
 
 #include <benchmark/benchmark.h>
 
@@ -35,7 +36,26 @@ void BM_SceneParse(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * state.range(0));
 }
 
+void BM_SceneHistoryStroke(benchmark::State& state) {
+    phantasm::iso::Scene scene{phantasm::iso::TileMap::blank(128, 128, 1)};
+    phantasm::iso::SceneHistory history{scene};
+    bool alternate = false;
+    for (auto _ : state) {
+        const char paint = alternate ? '.' : '#';
+        for (int i = 0; i < 10'000; ++i) {
+            history.paint({i % 128, i / 128, 0}, paint);
+        }
+        history.end_stroke();
+        benchmark::DoNotOptimize(history.undo());
+        benchmark::DoNotOptimize(history.redo());
+        history.clear();
+        alternate = !alternate;
+    }
+    state.SetItemsProcessed(state.iterations() * 10'000);
+}
+
 } // namespace
 
 BENCHMARK(BM_SceneSerialize)->Arg(10'000)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_SceneParse)->Arg(10'000)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_SceneHistoryStroke)->Unit(benchmark::kMillisecond);

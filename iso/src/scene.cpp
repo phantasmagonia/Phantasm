@@ -44,6 +44,15 @@ void check_position(GridPos position, int levels) {
     }
 }
 
+void check_object(const SceneObject& object, int levels) {
+    check_position(object.position, levels);
+    if (object.id == 0 || object.name.find_first_of("\r\n") != std::string::npos ||
+        object.asset.find_first_of("\r\n") != std::string::npos ||
+        !std::isfinite(object.scale) || object.scale <= 0.0F) {
+        throw std::invalid_argument("Scene object has an invalid ID, name, asset, or scale");
+    }
+}
+
 } // namespace
 
 Scene::Scene(TileMap map) : map_{std::move(map)} {
@@ -52,12 +61,13 @@ Scene::Scene(TileMap map) : map_{std::move(map)} {
     }
 }
 
-void Scene::insert(std::uint64_t id, GridPos position, std::string name) {
-    check_position(position, map_.level_count());
-    if (id == 0 || name.find_first_of("\r\n") != std::string::npos || ids_.contains(id)) {
-        throw std::invalid_argument("Scene object has an invalid or duplicate ID or name");
+void Scene::insert(SceneObject object) {
+    check_object(object, map_.level_count());
+    if (ids_.contains(object.id)) {
+        throw std::invalid_argument("Scene object has a duplicate ID");
     }
-    const Entity entity = store_->create(SceneObject{id, position, std::move(name)});
+    const auto id = object.id;
+    const Entity entity = store_->create(std::move(object));
     try {
         ids_.emplace(id, entity);
     } catch (...) {
@@ -66,14 +76,26 @@ void Scene::insert(std::uint64_t id, GridPos position, std::string name) {
     }
 }
 
-std::uint64_t Scene::create(GridPos position, std::string name) {
+std::uint64_t Scene::create(GridPos position, std::string name,
+                            std::string asset, float scale) {
     if (next_id_ == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("Scene ID space exhausted");
     }
     const auto id = next_id_;
-    insert(id, position, std::move(name));
+    insert(SceneObject{id, position, std::move(name), std::move(asset), scale});
     ++next_id_;
     return id;
+}
+
+void Scene::restore(SceneObject object) {
+    if (object.id == std::numeric_limits<std::uint64_t>::max()) {
+        throw std::overflow_error("Scene ID space exhausted");
+    }
+    const auto id = object.id;
+    insert(std::move(object));
+    if (id >= next_id_) {
+        next_id_ = id + 1;
+    }
 }
 
 bool Scene::erase(std::uint64_t id) {
@@ -104,7 +126,7 @@ std::string Scene::serialize() const {
     const std::string map_text = map_.serialize();
     std::ostringstream out;
     out.imbue(std::locale::classic());
-    out << "phantasm-scene 1\nmap-bytes " << map_text.size() << '\n' << map_text;
+    out << "phantasm-scene 2\nmap-bytes " << map_text.size() << '\n' << map_text;
     out << "entities " << ids_.size() << " next-id " << next_id_ << '\n';
     out << std::setprecision(std::numeric_limits<float>::max_digits10);
     for (const auto& [id, entity] : ids_) {
@@ -112,20 +134,20 @@ std::string Scene::serialize() const {
         if (value == nullptr || value->id != id) {
             throw std::logic_error("Scene object ID index is inconsistent");
         }
-        check_position(value->position, map_.level_count());
-        if (value->name.find_first_of("\r\n") != std::string::npos) {
-            throw std::invalid_argument("Scene object name contains a line break");
-        }
+        check_object(*value, map_.level_count());
         out << id << ' ' << value->position.x << ' ' << value->position.y << ' '
-            << value->position.level << ' ' << std::quoted(value->name) << '\n';
+            << value->position.level << ' ' << value->scale << ' '
+            << std::quoted(value->name) << ' ' << std::quoted(value->asset) << '\n';
     }
     return out.str();
 }
 
 Scene Scene::parse(std::string_view text) {
-    if (take_line(text) != "phantasm-scene 1") {
+    const auto version = take_line(text);
+    if (version != "phantasm-scene 1" && version != "phantasm-scene 2") {
         throw std::runtime_error("Unsupported scene format version");
     }
+    const bool legacy = version == "phantasm-scene 1";
     const std::size_t map_bytes = read_header<std::size_t>(take_line(text), "map-bytes ");
     if (map_bytes > text.size()) {
         throw std::runtime_error("Scene map data is truncated");
@@ -146,15 +168,16 @@ Scene Scene::parse(std::string_view text) {
     for (std::size_t i = 0; i < count; ++i) {
         std::istringstream row{std::string{take_line(text)}};
         row.imbue(std::locale::classic());
-        std::uint64_t id = 0;
-        GridPos position;
-        std::string name;
-        row >> id >> position.x >> position.y >> position.level >> std::quoted(name);
-        if (!row || !(row >> std::ws).eof() || id >= scene.next_id_) {
+        SceneObject object;
+        row >> object.id >> object.position.x >> object.position.y >> object.position.level;
+        if (!legacy) row >> object.scale;
+        row >> std::quoted(object.name);
+        if (!legacy) row >> std::quoted(object.asset);
+        if (!row || !(row >> std::ws).eof() || object.id >= scene.next_id_) {
             throw std::runtime_error("Scene entity row is invalid");
         }
         try {
-            scene.insert(id, position, std::move(name));
+            scene.insert(std::move(object));
         } catch (const std::invalid_argument& error) {
             throw std::runtime_error(error.what());
         }

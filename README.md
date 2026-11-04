@@ -368,9 +368,16 @@ Space cycles the background, T cycles texture modes, Esc quits.
 The editor opens a 32×32 map with two floor levels. Select a level and a tool in the left
 panel, then click or drag in the viewport to paint. Place entities with the Place entity tool;
 select one in the list to edit its name, grid position, and level. Save and Load use the file
-path in the panel (`scene.phscene` by default). The editor renders procedural placeholder
-tiles and entity markers; middle-drag pans and the mouse wheel zooms. Game art and
-game-specific components are not saved yet. Build
+path in the panel (`scene.phscene` by default), or pass a scene path when launching
+`phantasm_editor`. The editor renders procedural placeholder
+tiles and entity markers; middle-drag pans and the mouse wheel zooms. Enter a PNG or JPEG
+path in Placement image before placing an entity, or set Image in the inspector. Images render
+at their native size times Image scale, anchored at the grid position. Relative image paths
+resolve against the scene file's directory. Missing images show a marker; Reload images retries
+them after files change. Undo and Redo cover paint strokes, placements, deletions, and inspector
+edits; Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z are shortcuts. History clears when loading another scene.
+The editor loads at most two nearby images per frame, synchronously; large files can pause a frame.
+Game-specific components are not saved yet. Build
 with `-DPHANTASM_BUILD_EDITOR=OFF` to omit Dear ImGui and the editor target.
 
 The viewport iterates only tiles in the visible grid range. On a MacBook Air M1 (8 GB), the
@@ -428,12 +435,16 @@ inside iteration callbacks are rejected. Runtime handles are generational.
 the entity store. `Scene::save_file` and `Scene::load_file` round-trip them with an editable
 multi-level `TileMap`; IDs remain stable after deletion and reload. Use `object(id)` to edit a
 name or position, `map().set(...)` to paint a tile, and `serialize()` / `parse()` for in-memory
-storage. The current format saves scene-owned object fields only; game-specific components,
-textures, and other assets need their own persistence layer. The scene format is version 1;
-unknown versions are rejected.
+storage. Version 2 adds an image path and scale to each object and can still read version 1
+files. Game-specific components and image files themselves are not embedded in scenes;
+unknown format versions are rejected.
+
+On a MacBook Air M1 (8 GB), the release benchmark for a 10,000-tile paint stroke on a 128×128
+map measured **1.03 ms CPU** for painting, undoing, and redoing together. Reproduce with
+`./build/release/bin/phantasm_benchmarks --benchmark_filter=BM_SceneHistoryStroke`.
 
 On a MacBook Air M1 (8 GB), a release benchmark with a 160×160 two-level map and 10,000
-named objects measured **5.48 ms** to serialize and **7.53 ms** to parse in memory. File I/O is
+named objects measured **6.87 ms** to serialize and **8.85 ms** to parse version 2 in memory. File I/O is
 excluded. Reproduce with `./build/release/bin/phantasm_benchmarks --benchmark_filter='BM_Scene(Serialize|Parse)'`.
 
 For a large world, keep objects in game-owned storage and index their world bounds. Keep an

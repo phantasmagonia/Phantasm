@@ -1,4 +1,5 @@
 #include <phantasm/iso/scene.hpp>
+#include <phantasm/iso/scene_history.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -8,6 +9,7 @@
 
 using phantasm::iso::GridPos;
 using phantasm::iso::Scene;
+using phantasm::iso::SceneHistory;
 using phantasm::iso::TileCoord;
 using phantasm::iso::TileMap;
 
@@ -39,6 +41,76 @@ TEST_CASE("Scene IDs survive a file round trip") {
     const Scene loaded = Scene::load_file(path);
     CHECK(loaded.object(id) != nullptr);
     std::filesystem::remove(path);
+}
+
+TEST_CASE("Scene saves asset references and loads version 1 scenes") {
+    Scene scene{TileMap::blank(2, 2, 1)};
+    const auto id = scene.create(GridPos{1.0F, 1.0F, 0}, "tree", "art/tree house \"north\".png", 1.5F);
+    const Scene loaded = Scene::parse(scene.serialize());
+    REQUIRE(loaded.object(id) != nullptr);
+    CHECK(loaded.object(id)->asset == "art/tree house \"north\".png");
+    CHECK(loaded.object(id)->scale == 1.5F);
+
+    const std::string old = "phantasm-scene 1\nmap-bytes 10\nlevel 0\n#\n"
+                            "entities 1 next-id 2\n1 0 0 0 \"old\"\n";
+    const Scene legacy = Scene::parse(old);
+    REQUIRE(legacy.object(1) != nullptr);
+    CHECK(legacy.object(1)->asset.empty());
+    CHECK(legacy.object(1)->scale == 1.0F);
+    CHECK_THROWS_AS(scene.create(GridPos{0.0F, 0.0F, 0}, "bad", "image.png", 0.0F),
+                    std::invalid_argument);
+}
+
+TEST_CASE("Undo and redo group a tile stroke and preserve the next stable ID") {
+    Scene scene{TileMap::blank(3, 3, 1)};
+    SceneHistory history{scene};
+    history.paint(TileCoord{0, 0, 0}, '.');
+    history.paint(TileCoord{1, 0, 0}, '#');
+    history.paint(TileCoord{0, 0, 0}, '#');
+    history.end_stroke();
+    CHECK(history.can_undo());
+    CHECK(history.undo());
+    CHECK(scene.map().at(TileCoord{0, 0, 0}) == TileMap::kEmpty);
+    CHECK(scene.map().at(TileCoord{1, 0, 0}) == TileMap::kEmpty);
+    CHECK_FALSE(history.undo());
+    CHECK(history.redo());
+    CHECK(scene.map().at(TileCoord{0, 0, 0}) == '#');
+
+    const auto id = history.create(GridPos{1.0F, 1.0F, 0}, "tree", "tree.png");
+    const auto old_runtime = scene.runtime_entity(id);
+    CHECK(history.undo());
+    CHECK(scene.object(id) == nullptr);
+    CHECK(history.redo());
+    REQUIRE(scene.object(id) != nullptr);
+    CHECK_FALSE(scene.entities().alive(old_runtime));
+    CHECK(scene.object(id)->asset == "tree.png");
+    CHECK(history.create(GridPos{0.0F, 0.0F, 0}, "next") > id);
+}
+
+TEST_CASE("Undo covers inspector edits and deletion; new edits discard redo") {
+    Scene scene{TileMap::blank(2, 2, 1)};
+    SceneHistory history{scene};
+    const auto id = history.create(GridPos{0.0F, 0.0F, 0}, "before");
+    const auto before = *scene.object(id);
+    scene.object(id)->name = "after";
+    scene.object(id)->asset = "hero.png";
+    history.record_object_change(before);
+    CHECK(history.undo());
+    CHECK(scene.object(id)->name == "before");
+    CHECK(scene.object(id)->asset.empty());
+    CHECK(history.redo());
+    CHECK(scene.object(id)->asset == "hero.png");
+    CHECK(history.erase(id));
+    CHECK(scene.object(id) == nullptr);
+    CHECK(history.undo());
+    CHECK(scene.object(id)->asset == "hero.png");
+    CHECK(history.undo());
+    history.paint(TileCoord{0, 0, 0}, '.');
+    history.end_stroke();
+    CHECK_FALSE(history.can_redo());
+    history.clear();
+    CHECK_FALSE(history.can_undo());
+    CHECK_FALSE(history.can_redo());
 }
 
 TEST_CASE("Scene rejects duplicate IDs, bad versions and truncated data") {

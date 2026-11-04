@@ -16,6 +16,8 @@ struct SceneObject {
     std::uint64_t id = 0; // persistent across saves; runtime Entity handles are not
     GridPos position;
     std::string name;
+    std::string asset; // image path, relative to the scene file's directory
+    float scale = 1.0F;
 };
 
 // Editor-facing scene data. The store owns objects; IDs map persistent names to runtime handles.
@@ -29,7 +31,9 @@ public:
 
     [[nodiscard]] TileMap& map() noexcept { return map_; }
     [[nodiscard]] const TileMap& map() const noexcept { return map_; }
-    [[nodiscard]] std::uint64_t create(GridPos position, std::string name);
+    [[nodiscard]] std::uint64_t create(GridPos position, std::string name,
+                                       std::string asset = {}, float scale = 1.0F);
+    void restore(SceneObject object);
     [[nodiscard]] bool erase(std::uint64_t id);
     [[nodiscard]] SceneObject* object(std::uint64_t id) noexcept;
     [[nodiscard]] const SceneObject* object(std::uint64_t id) const noexcept;
@@ -37,7 +41,7 @@ public:
     [[nodiscard]] const EntityStore& entities() const noexcept { return *store_; }
 
 private:
-    void insert(std::uint64_t id, GridPos position, std::string name);
+    void insert(SceneObject object);
 
     TileMap map_;
     std::unique_ptr<EntityStore> store_ = std::make_unique<EntityStore>();

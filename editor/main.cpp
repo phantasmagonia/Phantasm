@@ -1,5 +1,6 @@
 #include <phantasm/application.hpp>
 #include <phantasm/iso/scene.hpp>
+#include <phantasm/iso/scene_history.hpp>
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -13,7 +14,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <exception>
+#include <filesystem>
+#include <map>
 #include <memory>
+#include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -24,6 +29,7 @@ using phantasm::iso::GridPos;
 using phantasm::iso::IsoGrid;
 using phantasm::iso::Scene;
 using phantasm::iso::SceneObject;
+using phantasm::iso::SceneHistory;
 using phantasm::iso::TileCoord;
 using phantasm::iso::TileMap;
 
@@ -61,8 +67,73 @@ std::vector<std::byte> white_pixel() {
     return {std::byte{255}, std::byte{255}, std::byte{255}, std::byte{255}};
 }
 
+class AssetCache {
+public:
+    explicit AssetCache(phantasm::Renderer& renderer) : renderer_{renderer} {}
+
+    void set_scene_file(const std::filesystem::path& file) {
+        const auto directory = std::filesystem::absolute(file).parent_path();
+        if (directory == directory_) return;
+        clear();
+        directory_ = directory;
+    }
+
+    void clear() {
+        renderer_.wait_idle();
+        loaded_.clear();
+        failed_.clear();
+        error_.clear();
+    }
+
+    [[nodiscard]] const phantasm::Texture* get(const std::string& asset) const noexcept {
+        if (const auto it = loaded_.find(asset); it != loaded_.end()) return &it->second;
+        return nullptr;
+    }
+
+    void prepare(const Scene& scene, const IsoGrid& grid, int level, phantasm::Rect view) {
+        std::size_t loaded = 0;
+        scene.entities().each<SceneObject>([&](const SceneObject& object) {
+            if (loaded >= 2 || object.position.level != level || object.asset.empty() ||
+                loaded_.contains(object.asset) || failed_.contains(object.asset)) return;
+            const auto point = grid.grid_to_world(object.position);
+            constexpr float margin = 1024.0F;
+            if (point.x < view.x - margin || point.x > view.x + view.w + margin ||
+                point.y < view.y - margin || point.y > view.y + view.h + margin) return;
+            load(object.asset);
+            ++loaded;
+        });
+    }
+
+    [[nodiscard]] const std::string& error() const noexcept { return error_; }
+
+private:
+    void load(const std::string& asset) {
+        const std::filesystem::path path{asset};
+        const std::string key = (path.is_absolute() ? path : directory_ / path)
+                                    .lexically_normal().string();
+        try {
+            const auto [it, inserted] = loaded_.emplace(asset, renderer_.load_texture(key));
+            (void)inserted;
+            error_.clear();
+            (void)it;
+        } catch (const std::exception& error) {
+            failed_.insert(asset);
+            error_ = "Could not load " + key + ": " + error.what();
+        }
+    }
+    phantasm::Renderer& renderer_;
+    std::filesystem::path directory_ = std::filesystem::current_path();
+    std::map<std::string, phantasm::Texture> loaded_;
+    std::set<std::string> failed_;
+    std::string error_;
+};
+
 void draw_scene(phantasm::Renderer& renderer, const Scene& scene, const IsoGrid& grid,
-                const phantasm::Texture& diamond, const phantasm::Texture& marker, int level) {
+                const phantasm::Texture& diamond, const phantasm::Texture& marker,
+                AssetCache& assets, int level, int view_width, int view_height) {
+    const auto view = phantasm::visible_world_rect(
+        renderer.camera(), {static_cast<float>(view_width), static_cast<float>(view_height)});
+    assets.prepare(scene, grid, level, view);
     if (!renderer.begin_frame({0.06F, 0.08F, 0.11F, 1.0F})) {
         renderer.end_frame();
         return;
@@ -90,11 +161,17 @@ void draw_scene(phantasm::Renderer& renderer, const Scene& scene, const IsoGrid&
     scene.entities().each<SceneObject>([&](const SceneObject& object) {
         if (object.position.level != level) return;
         const auto world = grid.grid_to_world(object.position);
-        renderer.draw_sprite(marker, {
-            .position = {world.x, world.y - 12.0F},
-            .size = {12.0F, 20.0F},
+        const phantasm::Texture* texture = assets.get(object.asset);
+        if (texture == nullptr) texture = &marker;
+        const bool image = texture != &marker;
+        renderer.draw_sprite(*texture, {
+            .position = {world.x, world.y},
+            .size = image ? phantasm::Vec2{static_cast<float>(texture->width()) * object.scale,
+                                            static_cast<float>(texture->height()) * object.scale}
+                          : phantasm::Vec2{12.0F, 20.0F},
             .pivot = {0.5F, 1.0F},
-            .tint = {0.95F, 0.28F, 0.38F, 1.0F},
+            .tint = image ? phantasm::Color{1.0F, 1.0F, 1.0F, 1.0F}
+                          : phantasm::Color{0.95F, 0.28F, 0.38F, 1.0F},
             .layer = 1,
             .depth = phantasm::iso::draw_depth(object.position),
         });
@@ -128,7 +205,8 @@ void present(phantasm::Renderer& renderer, SDL_Window* window) {
 
 class Editor {
 public:
-    Editor() : window_{{.title = "Phantasm Editor", .width = 1280, .height = 800}},
+    explicit Editor(const std::optional<std::filesystem::path>& initial_scene = std::nullopt)
+             : window_{{.title = "Phantasm Editor", .width = 1280, .height = 800}},
                renderer_{window_}, scene_{TileMap::blank(32, 32, 2)},
                diamond_{renderer_.create_texture(64, 32, diamond_pixels())},
                marker_{renderer_.create_texture(1, 1, white_pixel())} {
@@ -150,6 +228,15 @@ public:
             throw std::runtime_error("Could not initialize ImGui GPU backend");
         }
         imgui_->gpu = true;
+        if (initial_scene) {
+            const std::string path = initial_scene->string();
+            if (path.size() >= path_.size()) {
+                throw std::invalid_argument("Scene path is too long for the editor file field");
+            }
+            scene_ = Scene::load_file(*initial_scene);
+            assets_.set_scene_file(*initial_scene);
+            std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
+        }
     }
 
     ~Editor() { renderer_.wait_idle(); }
@@ -170,15 +257,49 @@ public:
             ImGui_ImplSDLGPU3_NewFrame();
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) history_.end_stroke();
+            const auto& io = ImGui::GetIO();
+            if (!io.WantTextInput && (io.KeyCtrl || io.KeySuper)) {
+                if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+                    finish_edit();
+                    if (io.KeyShift) (void)history_.redo();
+                    else (void)history_.undo();
+                } else if (ImGui::IsKeyPressed(ImGuiKey_Y, false)) {
+                    finish_edit();
+                    (void)history_.redo();
+                }
+            }
             sidebar();
             viewport();
-            draw_scene(renderer_, scene_, grid_, diamond_, marker_, level_);
+            draw_scene(renderer_, scene_, grid_, diamond_, marker_, assets_, level_,
+                       view_width_, view_height_);
             present(renderer_, window_.native_handle());
         }
         renderer_.wait_idle();
     }
 
 private:
+    void finish_edit() {
+        if (!pending_before_) return;
+        if (scene_.object(pending_before_->id) != nullptr) {
+            history_.record_object_change(*pending_before_);
+        }
+        pending_before_.reset();
+    }
+
+    void track_edit(const SceneObject& before) {
+        if (ImGui::IsItemActivated() || (!pending_before_ && ImGui::IsItemEdited())) {
+            pending_before_ = before;
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) finish_edit();
+    }
+
+    void select(std::uint64_t id) {
+        if (selected_ == id) return;
+        finish_edit();
+        selected_ = id;
+    }
+
     void sidebar() {
         ImGui::SetNextWindowPos({0.0F, 0.0F}, ImGuiCond_Always);
         ImGui::SetNextWindowSize({280.0F, ImGui::GetIO().DisplaySize.y}, ImGuiCond_Always);
@@ -186,37 +307,79 @@ private:
                                           ImGuiWindowFlags_NoCollapse);
         ImGui::InputText("File", path_.data(), path_.size());
         if (ImGui::Button("Save")) {
-            try { scene_.save_file(path_.data()); message_ = "Saved"; }
+            try {
+                finish_edit();
+                history_.end_stroke();
+                scene_.save_file(path_.data());
+                assets_.set_scene_file(path_.data());
+                message_ = "Saved";
+            }
             catch (const std::exception& error) { message_ = error.what(); }
         }
         ImGui::SameLine();
         if (ImGui::Button("Load")) {
-            try { scene_ = Scene::load_file(path_.data()); selected_ = 0; level_ = 0; message_ = "Loaded"; }
+            try {
+                finish_edit();
+                scene_ = Scene::load_file(path_.data());
+                history_.clear();
+                assets_.set_scene_file(path_.data());
+                selected_ = 0;
+                level_ = 0;
+                message_ = "Loaded";
+            }
             catch (const std::exception& error) { message_ = error.what(); }
         }
         ImGui::TextWrapped("%s", message_.c_str());
+        if (!assets_.error().empty()) ImGui::TextWrapped("%s", assets_.error().c_str());
+        if (ImGui::Button("Reload images")) assets_.clear();
+        ImGui::Separator();
+        ImGui::BeginDisabled(!history_.can_undo() && !pending_before_);
+        if (ImGui::Button("Undo")) { finish_edit(); (void)history_.undo(); }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!history_.can_redo());
+        if (ImGui::Button("Redo")) { finish_edit(); (void)history_.redo(); }
+        ImGui::EndDisabled();
         ImGui::Separator();
         ImGui::SliderInt("Floor level", &level_, 0, scene_.map().level_count() - 1);
         int tool = static_cast<int>(tool_);
         const char* names[] = {"Floor", "Wall", "Erase", "Place entity", "Select"};
-        if (ImGui::Combo("Tool", &tool, names, 5)) tool_ = static_cast<Tool>(tool);
+        if (ImGui::Combo("Tool", &tool, names, 5)) {
+            history_.end_stroke();
+            tool_ = static_cast<Tool>(tool);
+        }
         ImGui::TextUnformatted("Click or drag in the viewport to paint.");
+        ImGui::InputText("Placement image", place_asset_.data(), place_asset_.size());
         ImGui::Separator();
         ImGui::Text("Entities (%zu)", scene_.entities().size());
         scene_.entities().each<SceneObject>([&](const SceneObject& object) {
             const std::string label = object.name + "##" + std::to_string(object.id);
-            if (ImGui::Selectable(label.c_str(), selected_ == object.id)) selected_ = object.id;
+            if (ImGui::Selectable(label.c_str(), selected_ == object.id)) select(object.id);
         });
         if (SceneObject* object = scene_.object(selected_)) {
             ImGui::Separator();
             ImGui::Text("ID: %llu", static_cast<unsigned long long>(selected_));
             std::snprintf(name_.data(), name_.size(), "%s", object->name.c_str());
+            const SceneObject name_before = *object;
             if (ImGui::InputText("Name", name_.data(), name_.size())) object->name = name_.data();
+            track_edit(name_before);
+            std::snprintf(asset_.data(), asset_.size(), "%s", object->asset.c_str());
+            const SceneObject asset_before = *object;
+            if (ImGui::InputText("Image", asset_.data(), asset_.size())) object->asset = asset_.data();
+            track_edit(asset_before);
+            const SceneObject position_before = *object;
             ImGui::DragFloat2("Grid position", &object->position.x, 0.05F);
+            track_edit(position_before);
+            const SceneObject level_before = *object;
             ImGui::SliderInt("Object level", &object->position.level, 0,
                              scene_.map().level_count() - 1);
+            track_edit(level_before);
+            const SceneObject scale_before = *object;
+            ImGui::DragFloat("Image scale", &object->scale, 0.01F, 0.01F, 20.0F);
+            track_edit(scale_before);
             if (ImGui::Button("Delete entity")) {
-                (void)scene_.erase(selected_);
+                finish_edit();
+                (void)history_.erase(selected_);
                 selected_ = 0;
             }
         }
@@ -264,20 +427,22 @@ private:
             if (tile.x >= 0 && tile.x < scene_.map().width() && tile.y >= 0 &&
                 tile.y < scene_.map().height()) {
                 if (tool_ == Tool::floor || tool_ == Tool::wall || tool_ == Tool::erase) {
-                    scene_.map().set(tile, tool_ == Tool::floor ? '.' : tool_ == Tool::wall ? '#' : ' ');
+                    history_.paint(tile, tool_ == Tool::floor ? '.' : tool_ == Tool::wall ? '#' : ' ');
                 } else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && tool_ == Tool::place) {
-                    selected_ = scene_.create(GridPos{static_cast<float>(tile.x) + 0.5F,
-                                                       static_cast<float>(tile.y) + 0.5F, level_},
-                                              "Entity");
+                    finish_edit();
+                    selected_ = history_.create(GridPos{static_cast<float>(tile.x) + 0.5F,
+                                                         static_cast<float>(tile.y) + 0.5F, level_},
+                                                "Entity", place_asset_.data());
                 } else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && tool_ == Tool::select) {
-                    selected_ = 0;
+                    std::uint64_t picked = 0;
                     scene_.entities().each<SceneObject>([&](const SceneObject& object) {
                         if (object.position.level == level_ &&
                             std::abs(object.position.x - static_cast<float>(tile.x) - 0.5F) < 0.5F &&
                             std::abs(object.position.y - static_cast<float>(tile.y) - 0.5F) < 0.5F) {
-                            selected_ = object.id;
+                            picked = object.id;
                         }
                     });
+                    select(picked);
                 }
             }
         }
@@ -288,13 +453,18 @@ private:
     phantasm::Window window_;
     phantasm::Renderer renderer_;
     Scene scene_;
+    SceneHistory history_{scene_};
     phantasm::Texture diamond_;
     phantasm::Texture marker_;
+    AssetCache assets_{renderer_};
     std::unique_ptr<ImGuiScope> imgui_;
     IsoGrid grid_;
     std::array<char, 512> path_{'s', 'c', 'e', 'n', 'e', '.', 'p', 'h', 's', 'c', 'e', 'n', 'e', '\0'};
     std::array<char, 128> name_{};
+    std::array<char, 512> place_asset_{};
+    std::array<char, 512> asset_{};
     std::string message_;
+    std::optional<SceneObject> pending_before_;
     std::uint64_t selected_ = 0;
     int level_ = 0;
     int view_width_ = 0;
@@ -304,9 +474,10 @@ private:
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     try {
-        Editor editor;
+        if (argc > 2) throw std::invalid_argument("Usage: phantasm_editor [scene.phscene]");
+        Editor editor{argc == 2 ? std::optional<std::filesystem::path>{argv[1]} : std::nullopt};
         editor.run();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "Phantasm Editor: %s\n", error.what());
