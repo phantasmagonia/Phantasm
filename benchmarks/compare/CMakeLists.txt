@@ -41,3 +41,14 @@ target_link_libraries(compare_sdl_renderer PRIVATE SDL3::SDL3)
 # OpenGL is deprecated on macOS but is what raylib and SFML use there.
 target_compile_definitions(compare_raylib PRIVATE GL_SILENCE_DEPRECATION)
 target_compile_definitions(compare_sfml PRIVATE GL_SILENCE_DEPRECATION)
+
+option(PHANTASM_COMPARE_ENTT_FLAGS "Build the optional EnTT flag-toggle comparison" OFF)
+if(PHANTASM_COMPARE_ENTT_FLAGS)
+    FetchContent_Declare(EnTT
+        GIT_REPOSITORY https://github.com/skypjack/entt.git
+        GIT_TAG v3.16.0
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(EnTT)
+    add_executable(compare_entity_flags entity_flags_main.cpp)
+    target_link_libraries(compare_entity_flags PRIVATE phantasm EnTT::EnTT)
+endif()

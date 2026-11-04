@@ -265,6 +265,23 @@ The flag comparison measures the same 10,000 live handles per iteration. Sidecar
 moving packed components; they are for frequently changing booleans, not arbitrary component
 data. Run these benchmarks with
 `./build/release/bin/phantasm_benchmarks --benchmark_filter=BM_Entity`.
+
+**Direct EnTT flag comparison:** a separate, identical 1M-entity fixture with position,
+velocity, and render components toggles a `Stunned` tag on 10,000 entities per frame.
+MacBook Air M1 (8 GB), release, 30 warmup and 200 measured frames, median of three
+interleaved runs (milliseconds per toggle pass):
+
+| Storage | Median |
+|---|---:|
+| EnTT v3.16.0 component add/remove | 0.0631 ms |
+| Phantasm archetype component add/remove | 1.1119 ms |
+| Phantasm `EntityFlags` sidecar | 0.0155 ms |
+
+This measures flag changes only; the earlier render-data comparison measures a different
+access pattern. Reproduce it with
+`cmake -S benchmarks/compare -B build/compare -G Ninja -DCMAKE_BUILD_TYPE=Release -DPHANTASM_COMPARE_ENTT_FLAGS=ON`,
+`cmake --build build/compare --target compare_entity_flags`, then
+`bash benchmarks/compare/run_entity_flags.sh build/compare`.
 The same one-million-entity update fixture uses **62.9 bytes per entity in array capacity**
 (handles, slots, and three component columns); this excludes allocator and map-node overhead.
 Its component mix differs from the earlier EnTT prototype, so the byte counts are not directly
