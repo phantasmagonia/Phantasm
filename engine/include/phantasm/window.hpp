@@ -10,6 +10,7 @@ struct WindowConfig {
     std::string title = "Phantasm";
     int width = 1280;
     int height = 720;
+    bool hidden = false; // for offscreen rendering, tests, and benchmarks
 };
 
 class Window {

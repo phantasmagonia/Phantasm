@@ -9,7 +9,8 @@ namespace phantasm {
 
 Window::Window(const WindowConfig& config)
     : handle_{SDL_CreateWindow(config.title.c_str(), config.width, config.height,
-                               SDL_WINDOW_RESIZABLE)} {
+                               SDL_WINDOW_RESIZABLE |
+                                   (config.hidden ? SDL_WINDOW_HIDDEN : SDL_WindowFlags{0}))} {
     if (handle_ == nullptr) {
         throw std::runtime_error(std::string{"SDL_CreateWindow failed: "} + SDL_GetError());
     }

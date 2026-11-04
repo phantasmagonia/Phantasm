@@ -4,6 +4,7 @@
 
 #include <phantasm/log.hpp>
 #include <phantasm/paths.hpp>
+#include <phantasm/pixel_format.hpp>
 #include <phantasm/window.hpp>
 
 #include <SDL3/SDL.h>
@@ -146,6 +147,9 @@ void Renderer::destroy() noexcept {
         return;
     }
     SDL_WaitForGPUIdle(device_);
+    if (offscreen_ != nullptr) {
+        SDL_ReleaseGPUTexture(device_, offscreen_);
+    }
     if (instance_transfer_ != nullptr) {
         SDL_ReleaseGPUTransferBuffer(device_, instance_transfer_);
     }
@@ -171,7 +175,9 @@ void Renderer::create_sprite_pipeline() {
                                            ShaderResources{.samplers = 1});
 
     SDL_GPUColorTargetDescription target{};
+    // Offscreen targets reuse this format so one pipeline serves both.
     target.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    target_format_ = static_cast<std::uint32_t>(target.format);
     target.blend_state.enable_blend = true;
     target.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
     target.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -373,6 +379,14 @@ bool Renderer::begin_frame(Color clear_color) {
         return false;
     }
 
+    if (offscreen_ != nullptr) {
+        frame_target_ = offscreen_;
+        viewport_ = Vec2{static_cast<float>(offscreen_width_), static_cast<float>(offscreen_height_)};
+        visible_ = visible_world_rect(camera_, viewport_);
+        frame_start_ns_ = SDL_GetTicksNS();
+        return true;
+    }
+
     Uint32 width = 0;
     Uint32 height = 0;
     if (!SDL_WaitAndAcquireGPUSwapchainTexture(commands_, window_, &frame_target_, &width,
@@ -486,6 +500,98 @@ void Renderer::end_frame() {
     }
     commands_ = nullptr;
     frame_target_ = nullptr;
+}
+
+void Renderer::set_offscreen(int width, int height) {
+    if (offscreen_ != nullptr) {
+        SDL_WaitForGPUIdle(device_);
+        SDL_ReleaseGPUTexture(device_, offscreen_);
+        offscreen_ = nullptr;
+        offscreen_width_ = 0;
+        offscreen_height_ = 0;
+    }
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    if (width > kMaxTextureSize || height > kMaxTextureSize) {
+        throw std::invalid_argument("Offscreen target is larger than the maximum texture size");
+    }
+    SDL_GPUTextureCreateInfo info{};
+    info.type = SDL_GPU_TEXTURETYPE_2D;
+    info.format = static_cast<SDL_GPUTextureFormat>(target_format_);
+    info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    info.width = static_cast<Uint32>(width);
+    info.height = static_cast<Uint32>(height);
+    info.layer_count_or_depth = 1;
+    info.num_levels = 1;
+    offscreen_ = SDL_CreateGPUTexture(device_, &info);
+    if (offscreen_ == nullptr) {
+        throw_sdl_error("Creating offscreen target");
+    }
+    offscreen_width_ = width;
+    offscreen_height_ = height;
+}
+
+std::vector<std::byte> Renderer::read_offscreen_pixels() {
+    if (offscreen_ == nullptr) {
+        throw std::logic_error("read_offscreen_pixels() needs set_offscreen() first");
+    }
+    const auto width = static_cast<Uint32>(offscreen_width_);
+    const auto height = static_cast<Uint32>(offscreen_height_);
+    const Uint32 byte_count = width * height * kBytesPerPixel;
+
+    SDL_GPUTransferBufferCreateInfo transfer_info{};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    transfer_info.size = byte_count;
+    const TransferBufferPtr transfer{SDL_CreateGPUTransferBuffer(device_, &transfer_info),
+                                     TransferBufferRelease{device_}};
+    if (!transfer) {
+        throw_sdl_error("Creating download buffer");
+    }
+
+    SDL_GPUCommandBuffer* commands = SDL_AcquireGPUCommandBuffer(device_);
+    if (commands == nullptr) {
+        throw_sdl_error("Acquiring download command buffer");
+    }
+    SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(commands);
+    SDL_GPUTextureRegion source{};
+    source.texture = offscreen_;
+    source.w = width;
+    source.h = height;
+    source.d = 1;
+    SDL_GPUTextureTransferInfo destination{};
+    destination.transfer_buffer = transfer.get();
+    SDL_DownloadFromGPUTexture(copy, &source, &destination);
+    SDL_EndGPUCopyPass(copy);
+
+    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(commands);
+    if (fence == nullptr) {
+        throw_sdl_error("Submitting download");
+    }
+    const bool finished = SDL_WaitForGPUFences(device_, true, &fence, 1);
+    SDL_ReleaseGPUFence(device_, fence);
+    if (!finished) {
+        throw_sdl_error("Waiting for download");
+    }
+
+    const void* mapped = SDL_MapGPUTransferBuffer(device_, transfer.get(), false);
+    if (mapped == nullptr) {
+        throw_sdl_error("Mapping download buffer");
+    }
+    std::vector<std::byte> pixels(byte_count);
+    std::memcpy(pixels.data(), mapped, byte_count);
+    SDL_UnmapGPUTransferBuffer(device_, transfer.get());
+
+    const auto format = static_cast<SDL_GPUTextureFormat>(target_format_);
+    if (format == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM ||
+        format == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB) {
+        bgra_to_rgba(pixels);
+    }
+    return pixels;
+}
+
+void Renderer::wait_idle() {
+    SDL_WaitForGPUIdle(device_);
 }
 
 } // namespace phantasm

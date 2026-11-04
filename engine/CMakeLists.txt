@@ -11,6 +11,7 @@ add_library(phantasm
     src/input.cpp
     src/log.cpp
     src/paths.cpp
+    src/pixel_format.cpp
     src/renderer.cpp
     src/sprite.cpp
     src/sprite_batch.cpp

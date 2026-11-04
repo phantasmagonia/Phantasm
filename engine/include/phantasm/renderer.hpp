@@ -60,6 +60,15 @@ public:
     // Returns false if the requested mode is unavailable.
     bool set_vsync(bool enabled);
 
+    // Renders frames into a width x height texture instead of the window (benchmarks,
+    // tests, screenshots). Pass 0, 0 to render to the window again.
+    void set_offscreen(int width, int height);
+    // Waits for the GPU and returns the offscreen image as RGBA8, rows top to bottom.
+    // Throws std::logic_error if no offscreen target is set.
+    [[nodiscard]] std::vector<std::byte> read_offscreen_pixels();
+    // Blocks until the GPU has finished all submitted work.
+    void wait_idle();
+
     // Returns false if this frame can't be drawn (e.g. window minimized).
     // end_frame() must be called either way.
     bool begin_frame(Color clear_color);
@@ -80,6 +89,10 @@ private:
     SDL_Window* window_ = nullptr;
     SDL_GPUGraphicsPipeline* sprite_pipeline_ = nullptr;
     SDL_GPUSampler* sampler_ = nullptr;
+    SDL_GPUTexture* offscreen_ = nullptr;
+    int offscreen_width_ = 0;
+    int offscreen_height_ = 0;
+    std::uint32_t target_format_ = 0; // SDL_GPUTextureFormat of the window's swapchain
     SDL_GPUBuffer* instance_buffer_ = nullptr;
     SDL_GPUTransferBuffer* instance_transfer_ = nullptr;
     std::uint32_t instance_capacity_ = 0;
