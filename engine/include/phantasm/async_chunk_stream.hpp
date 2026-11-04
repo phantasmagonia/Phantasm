@@ -51,6 +51,7 @@ public:
     AsyncChunkStream& operator=(AsyncChunkStream&&) = delete;
 
     // Limits all queued, running, and completed-but-unpolled requests together.
+    // Queued loads follow the current view center; active loads finish normally.
     std::size_t update(Rect view, std::size_t max_pending) {
         desired_.update(view, 1'000'000, [](ChunkCoord coord) { return coord; });
         std::vector<ChunkCoord> missing;
@@ -93,7 +94,7 @@ public:
         }
         const double center_x = (static_cast<double>(view.x) + view.w * 0.5) / chunk_size_;
         const double center_y = (static_cast<double>(view.y) + view.h * 0.5) / chunk_size_;
-        std::sort(missing.begin(), missing.end(), [=](ChunkCoord a, ChunkCoord b) {
+        const auto nearest_first = [=](ChunkCoord a, ChunkCoord b) {
             const auto distance = [=](ChunkCoord c) {
                 const double dx = static_cast<double>(c.x) + 0.5 - center_x;
                 const double dy = static_cast<double>(c.y) + 0.5 - center_y;
@@ -102,7 +103,8 @@ public:
             const double da = distance(a);
             const double db = distance(b);
             return da == db ? a < b : da < db;
-        });
+        };
+        std::sort(missing.begin(), missing.end(), nearest_first);
         std::size_t queued = 0;
         {
             std::lock_guard lock{mutex_};
@@ -114,6 +116,7 @@ public:
                 queue_.push_back(coord);
                 ++queued;
             }
+            std::sort(queue_.begin(), queue_.end(), nearest_first);
         }
         cv_.notify_all();
         return queued;

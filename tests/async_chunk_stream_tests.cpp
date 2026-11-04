@@ -77,6 +77,40 @@ TEST_CASE("Completed stale chunks free request capacity") {
     CHECK(*stream.find({1, 0}) == 1);
 }
 
+TEST_CASE("Camera movement reprioritizes queued background loads") {
+    std::promise<void> started;
+    std::promise<void> release;
+    std::promise<ChunkCoord> next_chunk;
+    auto gate = release.get_future().share();
+    auto started_future = started.get_future();
+    auto next_future = next_chunk.get_future();
+    int calls = 0;
+    AsyncChunkStream<int> stream{32.0F, 0, [&](ChunkCoord coord) {
+        if (++calls == 1) {
+            started.set_value();
+            gate.wait();
+        } else if (calls == 2) {
+            next_chunk.set_value(coord);
+        }
+        return static_cast<int>(coord.x);
+    }};
+
+    CHECK(stream.update(Rect{0, 0, 96, 32}, 4) == 3);
+    const auto status = started_future.wait_for(2s);
+    if (status == std::future_status::ready) {
+        SECTION("A newly visible chunk joins the queue") {
+            CHECK(stream.update(Rect{0, 0, 128, 32}, 4) == 1);
+        }
+        SECTION("The request budget is already full") {
+            CHECK(stream.update(Rect{16, 0, 80, 32}, 3) == 0);
+        }
+    }
+    release.set_value();
+    REQUIRE(status == std::future_status::ready);
+    REQUIRE(next_future.wait_for(2s) == std::future_status::ready);
+    CHECK(next_future.get() == (ChunkCoord{2, 0}));
+}
+
 TEST_CASE("Background load errors are reported and retried explicitly") {
     int attempts = 0;
     AsyncChunkStream<int> stream{32.0F, 0, [&](ChunkCoord) -> int {
