@@ -52,14 +52,14 @@ std::uint64_t sort_key(int layer, float depth, std::uint16_t texture_id) noexcep
            texture_id;
 }
 
-void radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>& order) {
+bool radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>& order) {
     const std::size_t count = keys.size();
     order.resize(count);
     for (std::uint32_t i = 0; i < count; ++i) {
         order[i] = i;
     }
     if (count < 2) {
-        return;
+        return false;
     }
 
     // One read pass builds the histograms for all eight digits.
@@ -75,6 +75,7 @@ void radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>&
     buffers.keys_swap.resize(count);
     buffers.order_swap.resize(count);
 
+    bool moved = false;
     for (int pass = 0; pass < kPasses; ++pass) {
         auto& histogram = histograms[static_cast<std::size_t>(pass)];
         const int shift = pass * kDigitBits;
@@ -96,7 +97,9 @@ void radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>&
         }
         buffers.keys.swap(buffers.keys_swap);
         order.swap(buffers.order_swap);
+        moved = true;
     }
+    return moved;
 }
 
 std::vector<DrawRun> sort_and_group(std::vector<SpriteDraw>& sprites) {
@@ -109,13 +112,14 @@ std::vector<DrawRun> sort_and_group(std::vector<SpriteDraw>& sprites) {
             static_cast<std::uint16_t>(sprite.texture != nullptr ? sprite.texture->id() : 0);
         keys[i] = sort_key(sprite.layer, sprite.depth, texture_id);
     }
-    radix_sort(keys, buffers.order);
-
-    buffers.sorted.resize(sprites.size());
-    for (std::size_t i = 0; i < sprites.size(); ++i) {
-        buffers.sorted[i] = sprites[buffers.order[i]];
+    // All keys equal (e.g. one layer, one depth, one texture): already in order.
+    if (radix_sort(keys, buffers.order)) {
+        buffers.sorted.resize(sprites.size());
+        for (std::size_t i = 0; i < sprites.size(); ++i) {
+            buffers.sorted[i] = sprites[buffers.order[i]];
+        }
+        sprites.swap(buffers.sorted);
     }
-    sprites.swap(buffers.sorted);
 
     std::vector<DrawRun> runs;
     for (std::uint32_t i = 0; i < sprites.size(); ++i) {

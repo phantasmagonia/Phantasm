@@ -41,6 +41,7 @@ std::vector<DrawRun> sort_and_group(std::vector<SpriteDraw>& sprites);
 [[nodiscard]] std::uint64_t sort_key(int layer, float depth, std::uint16_t texture_id) noexcept;
 
 // Stable LSD radix sort. Writes the indices of `keys` in sorted order into `order`.
-void radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>& order);
+// Returns false if no pass ran, i.e. `order` is the identity and nothing moved.
+bool radix_sort(std::span<const std::uint64_t> keys, std::vector<std::uint32_t>& order);
 
 } // namespace phantasm

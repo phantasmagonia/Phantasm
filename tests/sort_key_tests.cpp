@@ -53,3 +53,16 @@ TEST_CASE("Radix sort handles empty input") {
 
     CHECK(order.empty());
 }
+
+TEST_CASE("Radix sort reports when no reordering was needed") {
+    const std::vector<std::uint64_t> same(100, 42);
+    std::vector<std::uint32_t> order;
+
+    CHECK_FALSE(radix_sort(same, order));
+    REQUIRE(order.size() == 100);
+    CHECK(order[0] == 0);
+    CHECK(order[99] == 99);
+
+    const std::vector<std::uint64_t> different{3, 1, 2};
+    CHECK(radix_sort(different, order));
+}

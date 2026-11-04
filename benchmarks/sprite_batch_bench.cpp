@@ -23,7 +23,7 @@ const std::deque<Texture>& textures(std::size_t count) {
     return pool;
 }
 
-enum class Order { Random, Sorted, MostlySorted };
+enum class Order { Random, Sorted, MostlySorted, Uniform };
 
 std::vector<SpriteDraw> make_sprites(std::size_t count, std::size_t texture_count, Order order) {
     std::mt19937 rng{42};
@@ -34,9 +34,9 @@ std::vector<SpriteDraw> make_sprites(std::size_t count, std::size_t texture_coun
     std::vector<SpriteDraw> sprites(count);
     for (SpriteDraw& sprite : sprites) {
         sprite.texture = &pool[pick(rng)];
-        sprite.depth = depth(rng);
+        sprite.depth = order == Order::Uniform ? 0.0F : depth(rng);
     }
-    if (order != Order::Random) {
+    if (order == Order::Sorted || order == Order::MostlySorted) {
         std::sort(sprites.begin(), sprites.end(),
                   [](const SpriteDraw& a, const SpriteDraw& b) { return a.depth < b.depth; });
     }
@@ -76,6 +76,11 @@ void BM_SortAndGroup_MostlySorted(benchmark::State& state) {
     run_sort_and_group(state, Order::MostlySorted);
 }
 
+// No ordering needed (one depth, one texture): the "plain" case of the engine comparison.
+void BM_SortAndGroup_Uniform(benchmark::State& state) {
+    run_sort_and_group(state, Order::Uniform);
+}
+
 void sprite_args(benchmark::Benchmark* bench) {
     for (const std::int64_t count : {1'000, 10'000, 100'000, 1'000'000}) {
         for (const std::int64_t texture_count : {1, 16}) {
@@ -89,3 +94,4 @@ void sprite_args(benchmark::Benchmark* bench) {
 
 BENCHMARK(BM_SortAndGroup_Random)->Apply(sprite_args);
 BENCHMARK(BM_SortAndGroup_MostlySorted)->Apply(sprite_args);
+BENCHMARK(BM_SortAndGroup_Uniform)->Apply(sprite_args);
