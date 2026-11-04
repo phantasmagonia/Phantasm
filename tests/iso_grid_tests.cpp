@@ -71,3 +71,26 @@ TEST_CASE("Draw depth increases toward the viewer") {
     CHECK(phantasm::iso::draw_depth(GridPos{2, 0, 0}) ==
           phantasm::iso::draw_depth(GridPos{0, 2, 0}));
 }
+
+TEST_CASE("Screen directions map to grid directions") {
+    const auto up = kGrid.world_delta_to_grid(Vec2{0.0F, -1.0F});
+    const auto right = kGrid.world_delta_to_grid(Vec2{1.0F, 0.0F});
+
+    // Up on screen is toward -x and -y in the grid; right is +x and -y.
+    CHECK(up.x < 0.0F);
+    CHECK(up.y == Catch::Approx(up.x));
+    CHECK(right.x > 0.0F);
+    CHECK(right.y == Catch::Approx(-right.x));
+}
+
+TEST_CASE("world_delta_to_grid is the inverse of the projection's linear part") {
+    const GridPos a{2.0F, 5.0F, 0};
+    const GridPos b{3.5F, 4.25F, 0};
+    const Vec2 world_delta{kGrid.grid_to_world(b).x - kGrid.grid_to_world(a).x,
+                           kGrid.grid_to_world(b).y - kGrid.grid_to_world(a).y};
+
+    const Vec2 grid_delta = kGrid.world_delta_to_grid(world_delta);
+
+    CHECK(grid_delta.x == Catch::Approx(1.5F));
+    CHECK(grid_delta.y == Catch::Approx(-0.75F));
+}

@@ -27,6 +27,9 @@ struct IsoGrid {
     [[nodiscard]] Vec2 grid_to_world(GridPos grid) const noexcept;
     [[nodiscard]] GridPos world_to_grid(Vec2 world, int level) const noexcept;
     [[nodiscard]] TileCoord pick_tile(Vec2 world, int level) const noexcept;
+    // Converts a movement/offset in world (screen-aligned) space to grid space, ignoring
+    // levels. Example: "up on screen" (0, -1) becomes a diagonal grid direction.
+    [[nodiscard]] Vec2 world_delta_to_grid(Vec2 world_delta) const noexcept;
 };
 
 // Sprite depth within a floor level (use the level as the sprite layer).

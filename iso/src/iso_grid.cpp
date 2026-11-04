@@ -13,13 +13,9 @@ Vec2 IsoGrid::grid_to_world(GridPos grid) const noexcept {
 }
 
 GridPos IsoGrid::world_to_grid(Vec2 world, int level) const noexcept {
-    if (tile_width <= 0.0F || tile_height <= 0.0F) {
-        return GridPos{.level = level};
-    }
     const float ground_y = world.y + static_cast<float>(level) * level_height;
-    const float u = world.x / tile_width;
-    const float v = ground_y / tile_height;
-    return GridPos{.x = v + u, .y = v - u, .level = level};
+    const Vec2 grid = world_delta_to_grid(Vec2{world.x, ground_y});
+    return GridPos{.x = grid.x, .y = grid.y, .level = level};
 }
 
 TileCoord IsoGrid::pick_tile(Vec2 world, int level) const noexcept {
@@ -30,6 +26,15 @@ TileCoord IsoGrid::pick_tile(Vec2 world, int level) const noexcept {
         .y = static_cast<int>(std::floor(grid.y)),
         .level = level,
     };
+}
+
+Vec2 IsoGrid::world_delta_to_grid(Vec2 world_delta) const noexcept {
+    if (tile_width <= 0.0F || tile_height <= 0.0F) {
+        return {};
+    }
+    const float u = world_delta.x / tile_width;
+    const float v = world_delta.y / tile_height;
+    return Vec2{v + u, v - u};
 }
 
 float draw_depth(GridPos grid) noexcept {
