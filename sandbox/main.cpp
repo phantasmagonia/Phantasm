@@ -399,7 +399,9 @@ private:
             request_quit();
             return;
         }
-        run = BenchRun{.scenario = run.scenario};
+        const auto next_scenario = run.scenario;
+        run = BenchRun{};
+        run.scenario = next_scenario;
         begin_scenario(run.scenario);
     }
 

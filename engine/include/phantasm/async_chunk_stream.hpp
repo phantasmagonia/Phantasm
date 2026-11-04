@@ -14,7 +14,6 @@
 #include <mutex>
 #include <optional>
 #include <set>
-#include <stop_token>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -35,10 +34,13 @@ public:
                      std::function<T(ChunkCoord)> loader)
         : chunk_size_{chunk_size}, desired_{chunk_size, prefetch_chunks},
           loader_{std::move(loader)},
-          worker_{[this](std::stop_token stop) { work(stop); }} {}
+          worker_{[this] { work(); }} {}
 
     ~AsyncChunkStream() {
-        worker_.request_stop();
+        {
+            std::lock_guard lock{mutex_};
+            stopping_ = true;
+        }
         cv_.notify_all();
         worker_.join();
     }
@@ -171,13 +173,13 @@ private:
         std::exception_ptr error;
     };
 
-    void work(std::stop_token stop) {
+    void work() {
         while (true) {
             ChunkCoord coord;
             {
                 std::unique_lock lock{mutex_};
-                cv_.wait(lock, [this, &stop] { return stop.stop_requested() || !queue_.empty(); });
-                if (stop.stop_requested()) {
+                cv_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
+                if (stopping_) {
                     return;
                 }
                 coord = queue_.front();
@@ -217,7 +219,8 @@ private:
     std::set<ChunkCoord> pending_;
     std::deque<ChunkCoord> queue_;
     std::deque<Result> ready_;
-    std::jthread worker_;
+    bool stopping_ = false;
+    std::thread worker_;
 };
 
 } // namespace phantasm
