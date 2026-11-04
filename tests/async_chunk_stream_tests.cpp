@@ -64,13 +64,22 @@ TEST_CASE("Background loader discards stale results after camera movement") {
 }
 
 TEST_CASE("Completed stale chunks free request capacity") {
-    AsyncChunkStream<int> stream{32.0F, 0,
-                                 [](ChunkCoord coord) { return static_cast<int>(coord.x); }};
+    // Chunk (1, 0) waits on a gate so the first poll() deterministically runs
+    // before its load completes, regardless of thread timing.
+    std::promise<void> release;
+    auto gate = release.get_future().share();
+    AsyncChunkStream<int> stream{32.0F, 0, [&](ChunkCoord coord) {
+        if (coord.x == 1) {
+            gate.wait();
+        }
+        return static_cast<int>(coord.x);
+    }};
     stream.update(Rect{0, 0, 32, 32}, 1);
     REQUIRE(stream.wait_for_ready(2s));
 
     CHECK(stream.update(Rect{32, 0, 32, 32}, 1) == 1);
     CHECK(stream.poll() == 0);
+    release.set_value();
     REQUIRE(stream.wait_for_ready(2s));
     CHECK(stream.poll() == 1);
     REQUIRE(stream.find({1, 0}) != nullptr);
