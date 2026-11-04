@@ -116,6 +116,9 @@ Phantasm will ship games on iOS and Android as well as desktop. Keep the runtime
 - `physics/` → library `phantasm_physics` (opt-in via `PHANTASM_BUILD_PHYSICS`), links `phantasm`;
   Box2D is PRIVATE. Public physics API uses engine world units; convert to meters only inside.
 - Games and demos live in the separate `phantasm-demo-projects` repository.
+- **The editor is parked (2026-11-05):** keep it building and its tests passing, but add no new
+  editor features until the maintainer resumes it. The proposed path for map editing is
+  importing maps made in Tiled (isometric support; reader such as tmxlite, zlib) — not started.
 - `editor/` → library `phantasm_editor_lib` (links `phantasm_iso`, Dear ImGui public) plus the
   thin `phantasm_editor` launcher in `editor/app/`. Editing logic goes in `EditorState` (no
   window, unit tested); UI code in `Editor`. Games extend it via `add_panel` / `add_inspector`.
