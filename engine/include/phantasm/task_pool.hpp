@@ -6,7 +6,6 @@
 #include <exception>
 #include <functional>
 #include <mutex>
-#include <stop_token>
 #include <thread>
 #include <vector>
 
@@ -31,7 +30,7 @@ public:
     [[nodiscard]] std::size_t worker_count() const noexcept { return workers_.size(); }
 
 private:
-    void worker_loop(std::stop_token stop);
+    void worker_loop();
     void run_chunks();
 
     std::mutex call_mutex_;
@@ -43,10 +42,11 @@ private:
     std::size_t grain_ = 1;
     std::size_t generation_ = 0;
     std::size_t finished_workers_ = 0;
+    bool stopping_ = false;
     std::atomic<std::size_t> next_{0};
     std::atomic<bool> cancelled_{false};
     std::exception_ptr error_;
-    std::vector<std::jthread> workers_;
+    std::vector<std::thread> workers_;
 };
 
 } // namespace phantasm

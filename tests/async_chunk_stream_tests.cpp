@@ -92,7 +92,13 @@ TEST_CASE("Background load errors are reported and retried explicitly") {
     auto failures = stream.take_failures();
     REQUIRE(failures.size() == 1);
     CHECK(failures[0].coord == (ChunkCoord{0, 0}));
-    CHECK_THROWS_AS(std::rethrow_exception(failures[0].error), std::runtime_error);
+    bool got_load_error = false;
+    try {
+        std::rethrow_exception(failures[0].error);
+    } catch (const std::runtime_error&) {
+        got_load_error = true;
+    }
+    CHECK(got_load_error);
     CHECK(stream.update(Rect{0, 0, 32, 32}, 1) == 0);
     CHECK(stream.retry({0, 0}));
     CHECK(stream.update(Rect{0, 0, 32, 32}, 1) == 1);

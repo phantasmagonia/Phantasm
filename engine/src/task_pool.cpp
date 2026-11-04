@@ -8,22 +8,30 @@ TaskPool::TaskPool(std::size_t worker_count) {
     workers_.reserve(worker_count);
     try {
         for (std::size_t i = 0; i < worker_count; ++i) {
-            workers_.emplace_back([this](std::stop_token stop) { worker_loop(stop); });
+            workers_.emplace_back([this] { worker_loop(); });
         }
     } catch (...) {
-        for (auto& worker : workers_) {
-            worker.request_stop();
+        {
+            std::lock_guard lock{mutex_};
+            stopping_ = true;
         }
         work_cv_.notify_all();
+        for (auto& worker : workers_) {
+            worker.join();
+        }
         throw;
     }
 }
 
 TaskPool::~TaskPool() {
-    for (auto& worker : workers_) {
-        worker.request_stop();
+    {
+        std::lock_guard lock{mutex_};
+        stopping_ = true;
     }
     work_cv_.notify_all();
+    for (auto& worker : workers_) {
+        worker.join();
+    }
 }
 
 void TaskPool::parallel_for(std::size_t count, std::size_t grain,
@@ -87,14 +95,14 @@ void TaskPool::run_chunks() {
     }
 }
 
-void TaskPool::worker_loop(std::stop_token stop) {
+void TaskPool::worker_loop() {
     std::size_t observed = 0;
     while (true) {
         std::unique_lock lock{mutex_};
-        work_cv_.wait(lock, [this, &stop, &observed] {
-            return stop.stop_requested() || generation_ != observed;
+        work_cv_.wait(lock, [this, &observed] {
+            return stopping_ || generation_ != observed;
         });
-        if (stop.stop_requested()) {
+        if (stopping_) {
             return;
         }
         observed = generation_;
