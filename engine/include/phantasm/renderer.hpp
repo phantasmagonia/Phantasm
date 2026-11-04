@@ -62,6 +62,9 @@ public:
     // Current drawable-area bounds in world coordinates, set by begin_frame().
     [[nodiscard]] Rect visible_rect() const noexcept { return visible_; }
     [[nodiscard]] const RenderStats& last_stats() const noexcept { return stats_; }
+    // Borrowed handles for tools that submit their own SDL_GPU passes; never release them.
+    [[nodiscard]] SDL_GPUDevice* native_device() const noexcept { return device_; }
+    [[nodiscard]] SDL_GPUTexture* offscreen_texture() const noexcept { return offscreen_; }
 
     // Vsync off uses immediate (or mailbox) presentation when the backend supports it.
     // Returns false if the requested mode is unavailable.

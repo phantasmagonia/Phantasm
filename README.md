@@ -5,8 +5,8 @@ fastest engine for isometric games**, from small rooms to huge, multi-level worl
 SDL3 and SDL_GPU, licensed under GPLv3 only.
 
 > **Status:** early development (pre-0.1). The core renderer and isometric math work and are
-> tested; rigid-body physics (Box2D) is available in an early form; audio and an editor are
-> not implemented. Development and measurements have
+> tested; rigid-body physics (Box2D) and a basic separate scene editor are available;
+> audio is not implemented. Development and measurements have
 > been on macOS (Metal). Builds and unit tests pass in CI on macOS, Windows, and Linux;
 > GPU runtime behavior on Windows and Linux has not been verified yet.
 
@@ -313,6 +313,8 @@ Implemented and tested:
   iteration, and a sidecar for frequently toggled flags.
 - **Scene files:** editable multi-level tile maps and named scene objects with persistent IDs;
   versioned text save/load built on the entity store.
+- **Editor (`phantasm_editor`):** separate Dear ImGui program with an off-screen isometric
+  viewport, floor-level tile painting, entity placement and inspector, and scene save/load.
 - **Physics (`phantasm_physics`, opt-in):** Box2D v3 rigid bodies (boxes, circles, static /
   kinematic / dynamic, gravity or top-down), in engine world units, with handles that stay safe
   after a body is destroyed. Collision filters (category/mask), sensors with enter/leave events,
@@ -323,7 +325,7 @@ Implemented and tested:
 
 Requirements: CMake 3.26+, Ninja, a C++20 compiler (Clang 17+, GCC 14+, or MSVC 2022),
 `glslc`, and `spirv-cross`.
-SDL3, stb, Box2D, Catch2, and Google Benchmark are downloaded automatically by CMake.
+SDL3, stb, Box2D, Dear ImGui, Catch2, and Google Benchmark are downloaded automatically by CMake.
 
 ```sh
 # macOS
@@ -333,6 +335,7 @@ cmake --preset debug
 cmake --build --preset debug
 ctest --preset debug
 ./build/debug/bin/sandbox          # optional: sprite count, e.g. 10000
+./build/debug/bin/phantasm_editor  # scene editor
 ```
 
 For code, shader, test, or build changes, build the debug preset and run
@@ -361,6 +364,20 @@ configure, build, and test commands. The sandbox needs a working SDL_GPU backend
 
 Sandbox controls: WASD/arrows pan, Q/E zoom, 1/2/3 spawn 1k/10k/100k sprites,
 Space cycles the background, T cycles texture modes, Esc quits.
+
+The editor opens a 32×32 map with two floor levels. Select a level and a tool in the left
+panel, then click or drag in the viewport to paint. Place entities with the Place entity tool;
+select one in the list to edit its name, grid position, and level. Save and Load use the file
+path in the panel (`scene.phscene` by default). The editor renders procedural placeholder
+tiles and entity markers; middle-drag pans and the mouse wheel zooms. Game art and
+game-specific components are not saved yet. Build
+with `-DPHANTASM_BUILD_EDITOR=OFF` to omit Dear ImGui and the editor target.
+
+The viewport iterates only tiles in the visible grid range. On a MacBook Air M1 (8 GB), the
+release tile-scan benchmark for a 4096×4096 map and a 1000×750 world-unit view measured
+**36.7 ms** scanning the whole map versus **0.004 ms** scanning the visible range (CPU time).
+These numbers cover tile lookup only, not GPU rendering or the editor UI. Reproduce with
+`./build/release/bin/phantasm_benchmarks --benchmark_filter='BM_Editor(All|Visible)Tiles'`.
 
 ## Minimal example
 
@@ -499,5 +516,5 @@ publishing your game.
 
 GPLv3 **allows companies to use and sell** the engine under its terms; it does not reserve
 engine sales to the author. Third-party components keep their own licenses: SDL3 (zlib),
-stb_image and stb_rect_pack (public domain / MIT), Box2D (MIT), Catch2 (BSL-1.0), and
+stb_image and stb_rect_pack (public domain / MIT), Box2D (MIT), Dear ImGui (MIT), Catch2 (BSL-1.0), and
 Google Benchmark (Apache-2.0).

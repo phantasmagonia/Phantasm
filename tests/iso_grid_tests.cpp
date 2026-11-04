@@ -94,3 +94,14 @@ TEST_CASE("world_delta_to_grid is the inverse of the projection's linear part") 
     CHECK(grid_delta.x == Catch::Approx(1.5F));
     CHECK(grid_delta.y == Catch::Approx(-0.75F));
 }
+
+TEST_CASE("Visible tile bounds include the viewport and exclude distant tiles") {
+    const phantasm::Rect view{-100.0F, -50.0F, 200.0F, 100.0F};
+    const auto bounds = phantasm::iso::visible_tile_bounds(kGrid, view, 0, 4096, 4096);
+    CHECK(bounds.first_x <= 0);
+    CHECK(bounds.first_y <= 0);
+    CHECK(bounds.last_x < 100);
+    CHECK(bounds.last_y < 100);
+    CHECK(bounds.last_x > bounds.first_x);
+    CHECK(bounds.last_y > bounds.first_y);
+}

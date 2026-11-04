@@ -17,6 +17,13 @@ struct TileCoord {
     int level = 0;
 };
 
+struct TileBounds {
+    int first_x = 0;
+    int first_y = 0;
+    int last_x = 0; // exclusive
+    int last_y = 0; // exclusive
+};
+
 // 2:1 diamond projection between grid space and world space.
 // Grid +x runs down-right on screen, grid +y runs down-left.
 struct IsoGrid {
@@ -34,5 +41,9 @@ struct IsoGrid {
 
 // Sprite depth within a floor level (use the level as the sprite layer).
 [[nodiscard]] float draw_depth(GridPos grid) noexcept;
+
+// Conservative tile range for an axis-aligned world view, clamped to map dimensions.
+[[nodiscard]] TileBounds visible_tile_bounds(const IsoGrid& grid, Rect view, int level,
+                                              int width, int height) noexcept;
 
 } // namespace phantasm::iso

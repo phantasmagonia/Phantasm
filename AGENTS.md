@@ -100,6 +100,8 @@ Apply these checks when designing or reviewing a subsystem:
 - `physics/` → library `phantasm_physics` (opt-in via `PHANTASM_BUILD_PHYSICS`), links `phantasm`;
   Box2D is PRIVATE. Public physics API uses engine world units; convert to meters only inside.
 - Games and demos live in the separate `phantasm-demo-projects` repository.
+- `editor/` builds the separate `phantasm_editor` program. Dear ImGui and SDL remain outside
+  the `phantasm` and `phantasm_iso` public APIs; disable with `PHANTASM_BUILD_EDITOR=OFF`.
 - No art files in this repository. Tests, benchmarks, and the sandbox generate textures in code
   (`Renderer::create_texture`).
 - SDL is a PRIVATE dependency: public headers forward-declare SDL types and never include SDL.

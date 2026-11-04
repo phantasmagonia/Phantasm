@@ -1,6 +1,7 @@
 add_executable(phantasm_benchmarks
     chunk_index_bench.cpp
     entity_store_bench.cpp
+    editor_tile_bench.cpp
     iso_bench.cpp
     iso_prepare_bench.cpp
     scene_bench.cpp

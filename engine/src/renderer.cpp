@@ -607,7 +607,7 @@ void Renderer::set_offscreen(int width, int height) {
     SDL_GPUTextureCreateInfo info{};
     info.type = SDL_GPU_TEXTURETYPE_2D;
     info.format = static_cast<SDL_GPUTextureFormat>(target_format_);
-    info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     info.width = static_cast<Uint32>(width);
     info.height = static_cast<Uint32>(height);
     info.layer_count_or_depth = 1;
