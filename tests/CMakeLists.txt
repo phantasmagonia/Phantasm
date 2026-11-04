@@ -4,6 +4,7 @@ add_executable(phantasm_tests
     camera_tests.cpp
     chunk_index_tests.cpp
     chunk_stream_tests.cpp
+    compare_workload_tests.cpp
     fixed_step_tests.cpp
     frame_clock_tests.cpp
     frame_stats_tests.cpp

@@ -6,6 +6,7 @@
 #include <phantasm/paths.hpp>
 #include <phantasm/pixel_format.hpp>
 #include <phantasm/window.hpp>
+#include <phantasm/task_pool.hpp>
 
 #include <SDL3/SDL.h>
 
@@ -179,7 +180,7 @@ void Renderer::create_sprite_pipeline() {
     target.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
     target_format_ = static_cast<std::uint32_t>(target.format);
     target.blend_state.enable_blend = true;
-    target.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    target.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
     target.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     target.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
     target.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
@@ -285,7 +286,17 @@ Texture Renderer::create_texture(int width_px, int height_px, std::span<const st
     if (mapped == nullptr) {
         throw_sdl_error("Mapping transfer buffer");
     }
-    std::memcpy(mapped, rgba.data(), byte_count);
+    // Rendered layers already contain premultiplied color; uploaded textures use
+    // the same representation so nested layers blend without dark alpha edges.
+    auto* pixels = static_cast<Uint8*>(mapped);
+    for (std::size_t i = 0; i < byte_count; i += 4) {
+        const auto alpha = std::to_integer<Uint32>(rgba[i + 3]);
+        for (std::size_t channel = 0; channel < 3; ++channel) {
+            pixels[i + channel] = static_cast<Uint8>(
+                (std::to_integer<Uint32>(rgba[i + channel]) * alpha + 127) / 255);
+        }
+        pixels[i + 3] = static_cast<Uint8>(alpha);
+    }
     SDL_UnmapGPUTransferBuffer(device_, transfer.get());
 
     SDL_GPUCommandBuffer* commands = SDL_AcquireGPUCommandBuffer(device_);
@@ -306,6 +317,67 @@ Texture Renderer::create_texture(int width_px, int height_px, std::span<const st
         throw_sdl_error("Submitting texture upload");
     }
     return texture;
+}
+
+Texture Renderer::cache_layer(const Texture& atlas, std::span<const Sprite> sprites,
+                              int width, int height) {
+    if (commands_ != nullptr) {
+        throw std::logic_error("cache_layer must be called between frames");
+    }
+    if (width <= 0 || height <= 0 || width > kMaxTextureSize || height > kMaxTextureSize) {
+        throw std::invalid_argument("Cached layer dimensions are outside supported texture sizes");
+    }
+    SDL_GPUTextureCreateInfo info{};
+    info.type = SDL_GPU_TEXTURETYPE_2D;
+    info.format = static_cast<SDL_GPUTextureFormat>(target_format_);
+    info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    info.width = static_cast<Uint32>(width);
+    info.height = static_cast<Uint32>(height);
+    info.layer_count_or_depth = 1;
+    info.num_levels = 1;
+    Texture layer{device_, SDL_CreateGPUTexture(device_, &info), width, height};
+    if (layer.native_handle() == nullptr) {
+        throw_sdl_error("Creating cached layer");
+    }
+    const auto saved_camera = camera_;
+    const auto saved_viewport = viewport_;
+    const auto saved_visible = visible_;
+    const auto saved_stats = stats_;
+    const auto restore = [&] {
+        camera_ = saved_camera;
+        viewport_ = saved_viewport;
+        visible_ = saved_visible;
+        stats_ = saved_stats;
+        frame_target_ = nullptr;
+        queue_.clear();
+    };
+    commands_ = SDL_AcquireGPUCommandBuffer(device_);
+    if (commands_ == nullptr) {
+        throw_sdl_error("Acquiring cached layer command buffer");
+    }
+    try {
+        frame_target_ = layer.native_handle();
+        viewport_ = {static_cast<float>(width), static_cast<float>(height)};
+        camera_ = {.position = {viewport_.x * 0.5F, viewport_.y * 0.5F}};
+        visible_ = visible_world_rect(camera_, viewport_);
+        clear_color_ = {0, 0, 0, 0};
+        queue_.clear();
+        culled_ = 0;
+        frame_start_ns_ = SDL_GetTicksNS();
+        for (const auto& sprite : sprites) {
+            draw_sprite(atlas, sprite);
+        }
+        end_frame();
+    } catch (...) {
+        if (commands_ != nullptr) {
+            SDL_CancelGPUCommandBuffer(commands_);
+            commands_ = nullptr;
+        }
+        restore();
+        throw;
+    }
+    restore();
+    return layer;
 }
 
 void Renderer::ensure_instance_capacity(std::uint32_t count) {
@@ -416,6 +488,25 @@ void Renderer::draw_sprite(const Texture& texture, const Sprite& sprite) {
                 pack_instance(world_rect, sprite.uv, sprite.tint));
 }
 
+void Renderer::set_worker_count(std::size_t count) {
+    if (commands_ != nullptr) {
+        throw std::logic_error("set_worker_count must be called between frames");
+    }
+    if (count == 0) {
+        workers_.reset();
+    } else {
+        workers_ = std::make_unique<TaskPool>(count);
+    }
+}
+
+void Renderer::draw_sprites(const Texture& texture, std::span<const Sprite> sprites) {
+    if (frame_target_ == nullptr || texture.native_handle() == nullptr) {
+        return;
+    }
+    const std::size_t added = queue_.append(texture, sprites, visible_, workers_.get());
+    culled_ += static_cast<std::uint32_t>(sprites.size() - added);
+}
+
 void Renderer::upload_instances() {
     const auto count = static_cast<std::uint32_t>(queue_.size());
     ensure_instance_capacity(count);
@@ -428,7 +519,7 @@ void Renderer::upload_instances() {
         throw_sdl_error("Mapping sprite transfer buffer");
     }
     // Sorted instances go straight into GPU-visible memory: no intermediate copy.
-    queue_.write_sorted(std::span{mapped, count});
+    queue_.write_sorted(std::span{mapped, count}, workers_.get());
     SDL_UnmapGPUTransferBuffer(device_, instance_transfer_);
 
     SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(commands_);
@@ -444,7 +535,8 @@ void Renderer::upload_instances() {
 void Renderer::record_draws(const std::vector<DrawRun>& runs) {
     SDL_GPUColorTargetInfo color_target{};
     color_target.texture = frame_target_;
-    color_target.clear_color = {clear_color_.r, clear_color_.g, clear_color_.b, clear_color_.a};
+    color_target.clear_color = {clear_color_.r * clear_color_.a, clear_color_.g * clear_color_.a,
+                                clear_color_.b * clear_color_.a, clear_color_.a};
     color_target.load_op = SDL_GPU_LOADOP_CLEAR;
     color_target.store_op = SDL_GPU_STOREOP_STORE;
     SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(commands_, &color_target, 1, nullptr);

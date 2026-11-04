@@ -8,5 +8,5 @@ layout(location = 0) out vec4 out_color;
 layout(set = 2, binding = 0) uniform sampler2D sprite_texture;
 
 void main() {
-    out_color = texture(sprite_texture, in_uv) * in_tint;
+    out_color = texture(sprite_texture, in_uv) * vec4(in_tint.rgb * in_tint.a, in_tint.a);
 }

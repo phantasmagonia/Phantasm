@@ -1,7 +1,7 @@
 #pragma once
 
 // Shared by every engine in the comparison so they run identical work:
-// N 16x16 sprites bouncing inside a 1280x720 window, one texture, vsync off.
+// Moving sprites or an isometric tilemap, walls, and moving characters.
 
 #include <algorithm>
 #include <chrono>
@@ -11,10 +11,28 @@
 #include <cstdio>
 #include <cstdlib>
 #include <random>
+#include <span>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
 namespace compare {
+
+inline void save_screenshot(std::span<const std::uint8_t> rgba, int width, int height) {
+    const char* path = std::getenv("COMPARE_SCREENSHOT");
+    if (path == nullptr) {
+        return;
+    }
+    std::FILE* file = std::fopen(path, "wb");
+    if (file == nullptr) {
+        throw std::runtime_error("Cannot open comparison screenshot");
+    }
+    std::fprintf(file, "P6\n%d %d\n255\n", width, height);
+    for (std::size_t i = 0; i < rgba.size(); i += 4) {
+        std::fwrite(rgba.data() + i, 1, 3, file);
+    }
+    std::fclose(file);
+}
 
 inline constexpr int kWindowWidth = 1280;
 inline constexpr int kWindowHeight = 720;
@@ -34,6 +52,7 @@ struct Options {
     bool sorted = false;    // y-sorted draw order every frame (isometric case)
     bool offscreen = false; // render into a texture; nothing is presented to the screen
     bool iso = false;       // isometric scene instead of free sprites
+    bool cached = false;    // floor tiles rendered once into a texture
 };
 
 inline Options parse(int argc, char** argv) {
@@ -43,7 +62,8 @@ inline Options parse(int argc, char** argv) {
     }
     if (argc > 2) {
         options.sorted = std::string_view{argv[2]} == "sorted";
-        options.iso = std::string_view{argv[2]} == "iso";
+        options.cached = std::string_view{argv[2]} == "iso-cached";
+        options.iso = std::string_view{argv[2]} == "iso" || options.cached;
     }
     if (argc > 3) {
         options.offscreen = std::string_view{argv[3]} == "offscreen";
@@ -109,8 +129,10 @@ inline std::vector<std::uint8_t> blob_pixels() {
 class FrameTimer {
 public:
     // Returns true while more frames should run.
-    bool tick() {
-        const auto now = std::chrono::steady_clock::now();
+    bool tick(std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now()) {
+        if (frame_ > kWarmupFrames + kMeasuredFrames) {
+            return false;
+        }
         if (frame_ == kWarmupFrames) {
             measure_start_ = now;
         }
@@ -118,12 +140,13 @@ public:
             samples_.push_back(std::chrono::duration<double, std::milli>(now - last_).count());
         }
         last_ = now;
-        ++frame_;
-        return frame_ <= kWarmupFrames + kMeasuredFrames + 1;
+        return frame_++ < kWarmupFrames + kMeasuredFrames;
     }
 
     // Call after waiting for the GPU to finish all frames.
     void finish() { measure_end_ = std::chrono::steady_clock::now(); }
+
+    [[nodiscard]] std::size_t measured_frames() const { return samples_.size(); }
 
     [[nodiscard]] float dt() const { return 1.0F / 60.0F; } // fixed so all engines move alike
 
@@ -143,7 +166,8 @@ public:
             std::chrono::duration<double, std::milli>(measure_end_ - measure_start_).count() /
             static_cast<double>(sorted.size());
         std::printf("%.*s,%s,%s,%zu,%zu,%.3f,%.3f,%.3f,%.3f\n", static_cast<int>(engine.size()),
-                    engine.data(), options.iso ? "iso" : (options.sorted ? "sorted" : "plain"),
+                    engine.data(), options.cached ? "iso-cached" :
+                        (options.iso ? "iso" : (options.sorted ? "sorted" : "plain")),
                     options.offscreen ? "offscreen" : "window", options.count, sorted.size(),
                     sum / static_cast<double>(sorted.size()), rank(50.0), rank(99.0), throughput);
         std::fflush(stdout);

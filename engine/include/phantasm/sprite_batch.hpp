@@ -2,6 +2,7 @@
 
 #include <phantasm/color.hpp>
 #include <phantasm/geometry.hpp>
+#include <phantasm/sprite.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +12,7 @@
 namespace phantasm {
 
 class Texture;
+class TaskPool;
 
 // Per-sprite instance data, read by the vertex shader as vertex attributes.
 // Packed to 32 bytes: less memory traffic when sorting and uploading every frame.
@@ -37,12 +39,16 @@ class SpriteQueue {
 public:
     void clear() noexcept;
     void push(const Texture& texture, int layer, float depth, const SpriteInstance& instance);
+    // Culls and prepares a single-texture batch, preserving submission order.
+    // Workers only write CPU memory; this call waits for all ranges to complete.
+    std::size_t append(const Texture& texture, std::span<const Sprite> sprites, Rect view,
+                       TaskPool* pool = nullptr);
 
     // Sorts by (layer, depth, texture), stably, and returns the draw runs.
     [[nodiscard]] std::vector<DrawRun> sort();
     // Writes instances in sorted order. `out` must hold size() elements.
     // Call after sort(); a plain memcpy when no reordering was needed.
-    void write_sorted(std::span<SpriteInstance> out) const;
+    void write_sorted(std::span<SpriteInstance> out, TaskPool* pool = nullptr) const;
 
     [[nodiscard]] std::size_t size() const noexcept { return instances_.size(); }
 
@@ -51,6 +57,7 @@ private:
     std::vector<SpriteInstance> instances_;
     std::vector<const Texture*> textures_;
     std::vector<std::uint32_t> order_;
+    std::vector<std::size_t> batch_counts_;
     bool reordered_ = false;
 };
 

@@ -43,6 +43,20 @@ int main(int argc, char** argv) {
         const SDL_FRect target{s.x, s.y, s.region.w, s.region.h};
         SDL_RenderTexture(renderer, atlas, &source, &target);
     };
+    SDL_Texture* floor_cache = nullptr;
+    if (options.cached) {
+        floor_cache = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
+            SDL_TEXTUREACCESS_TARGET, compare::kWindowWidth, compare::kWindowHeight);
+        SDL_SetTextureBlendMode(floor_cache, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(floor_cache, SDL_SCALEMODE_NEAREST);
+        SDL_SetRenderTarget(renderer, floor_cache);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        for (const auto& floor : iso->floors()) {
+            draw_iso(floor);
+        }
+        SDL_SetRenderTarget(renderer, offscreen);
+    }
     compare::FrameTimer timer;
 
     bool running = true;
@@ -62,8 +76,12 @@ int main(int argc, char** argv) {
         SDL_SetRenderDrawColor(renderer, 20, 22, 28, 255);
         SDL_RenderClear(renderer);
         if (iso) {
-            for (const auto& floor : iso->floors()) {
-                draw_iso(floor);
+            if (floor_cache != nullptr) {
+                SDL_RenderTexture(renderer, floor_cache, nullptr, nullptr);
+            } else {
+                for (const auto& floor : iso->floors()) {
+                    draw_iso(floor);
+                }
             }
             for (const auto& object : iso->objects(true)) {
                 draw_iso(object);
@@ -83,6 +101,23 @@ int main(int argc, char** argv) {
     const SDL_Rect one_pixel{0, 0, 1, 1};
     SDL_DestroySurface(SDL_RenderReadPixels(renderer, &one_pixel));
     timer.finish();
+    if (options.offscreen && std::getenv("COMPARE_SCREENSHOT") != nullptr) {
+        SDL_Surface* image = SDL_RenderReadPixels(renderer, nullptr);
+        SDL_Surface* rgba = SDL_ConvertSurface(image, SDL_PIXELFORMAT_RGBA32);
+        if (rgba == nullptr) {
+            throw std::runtime_error(SDL_GetError());
+        }
+        std::vector<std::uint8_t> packed(compare::kWindowWidth * compare::kWindowHeight * 4);
+        for (int y = 0; y < rgba->h; ++y) {
+            std::copy_n(static_cast<const std::uint8_t*>(rgba->pixels) + y * rgba->pitch,
+                rgba->w * 4, packed.data() + y * rgba->w * 4);
+        }
+        compare::save_screenshot(packed, compare::kWindowWidth, compare::kWindowHeight);
+        SDL_DestroySurface(rgba);
+        SDL_DestroySurface(image);
+    }
+    SDL_DestroyTexture(floor_cache);
+    SDL_DestroyTexture(atlas);
     if (offscreen != nullptr) {
         SDL_DestroyTexture(offscreen);
     }

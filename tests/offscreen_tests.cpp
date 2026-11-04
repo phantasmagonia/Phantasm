@@ -34,9 +34,16 @@ class GpuHarness final : public phantasm::Application {
 public:
     GpuHarness() : Application{{.title = "gpu test", .width = 64, .height = 64, .hidden = true}} {}
     using Application::renderer;
+    bool quit_on_update = false;
+    int rendered_frames = 0;
 
 protected:
-    void on_update(double) override {}
+    void on_update(double) override {
+        if (quit_on_update) {
+            request_quit();
+        }
+    }
+    void on_render() override { ++rendered_frames; }
 };
 
 std::unique_ptr<GpuHarness> make_harness() {
@@ -83,4 +90,51 @@ TEST_CASE("Reading pixels without an offscreen target is an error") {
         SKIP("No GPU device available");
     }
     CHECK_THROWS_AS(harness->renderer().read_offscreen_pixels(), std::logic_error);
+}
+
+TEST_CASE("Quitting during update does not render an extra frame") {
+    auto harness = make_harness();
+    if (!harness) {
+        SKIP("No GPU device available");
+    }
+    harness->renderer().set_offscreen(16, 16);
+    harness->quit_on_update = true;
+    harness->run();
+    CHECK(harness->rendered_frames == 0);
+}
+
+TEST_CASE("Cached layers preserve transparent edges and tinted alpha") {
+    auto harness = make_harness();
+    if (!harness) {
+        SKIP("No GPU device available");
+    }
+    auto& renderer = harness->renderer();
+    renderer.set_offscreen(16, 16);
+    renderer.set_camera({.position = {8, 8}});
+    const std::array<std::byte, 4> rgba{
+        std::byte{255}, std::byte{0}, std::byte{0}, std::byte{128}};
+    auto source = renderer.create_texture(1, 1, rgba);
+    const std::array<phantasm::Sprite, 1> sprites{{
+        {.position = {2, 2}, .size = {8, 8}}}};
+    auto cached = renderer.cache_layer(source, sprites, 16, 16);
+
+    REQUIRE(renderer.begin_frame({0, 0, 1, 1}));
+    renderer.draw_sprite(source, {.position = {2, 2}, .size = {8, 8},
+                                  .tint = {1, 1, 1, 0.5F}});
+    renderer.end_frame();
+    const auto direct = renderer.read_offscreen_pixels();
+
+    REQUIRE(renderer.begin_frame({0, 0, 1, 1}));
+    renderer.draw_sprite(cached, {.size = {16, 16}, .tint = {1, 1, 1, 0.5F}});
+    renderer.end_frame();
+    const auto composed = renderer.read_offscreen_pixels();
+    REQUIRE(direct.size() == composed.size());
+    for (std::size_t i = 0; i < direct.size(); ++i) {
+        CHECK(std::abs(std::to_integer<int>(direct[i]) - std::to_integer<int>(composed[i])) <= 1);
+    }
+    CHECK(pixel_at(composed, 16, 0, 0) == std::array{0, 0, 255, 255});
+    CHECK_THROWS_AS(renderer.cache_layer(source, sprites, 0, 16), std::invalid_argument);
+    REQUIRE(renderer.begin_frame({0, 0, 0, 1}));
+    CHECK_THROWS_AS(renderer.cache_layer(source, sprites, 16, 16), std::logic_error);
+    renderer.end_frame();
 }

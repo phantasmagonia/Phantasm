@@ -36,6 +36,16 @@ int main(int argc, char** argv) {
         DrawTextureRec(atlas, Rectangle{s.region.u, s.region.v, s.region.w, s.region.h},
                        Vector2{s.x, s.y}, WHITE);
     };
+    RenderTexture2D floor_cache{};
+    if (options.cached) {
+        floor_cache = LoadRenderTexture(compare::kWindowWidth, compare::kWindowHeight);
+        BeginTextureMode(floor_cache);
+        ClearBackground(BLANK);
+        for (const auto& floor : iso->floors()) {
+            draw_iso(floor);
+        }
+        EndTextureMode();
+    }
     compare::FrameTimer timer;
 
     while (!WindowShouldClose() && timer.tick()) {
@@ -54,8 +64,14 @@ int main(int argc, char** argv) {
         }
         ClearBackground(Color{20, 22, 28, 255});
         if (iso) {
-            for (const auto& floor : iso->floors()) {
-                draw_iso(floor);
+            if (options.cached) {
+                DrawTextureRec(floor_cache.texture,
+                    Rectangle{0, 0, compare::kWindowWidth, -compare::kWindowHeight},
+                    Vector2{0, 0}, WHITE);
+            } else {
+                for (const auto& floor : iso->floors()) {
+                    draw_iso(floor);
+                }
             }
             for (const auto& object : iso->objects(true)) {
                 draw_iso(object);
@@ -73,6 +89,20 @@ int main(int argc, char** argv) {
     }
     glFinish(); // include all queued GPU work in the measurement
     timer.finish();
+    if (options.offscreen && std::getenv("COMPARE_SCREENSHOT") != nullptr) {
+        Image screenshot = LoadImageFromTexture(target.texture);
+        ImageFlipVertical(&screenshot);
+        compare::save_screenshot({static_cast<const std::uint8_t*>(screenshot.data),
+            compare::kWindowWidth * compare::kWindowHeight * 4},
+            compare::kWindowWidth, compare::kWindowHeight);
+        UnloadImage(screenshot);
+    }
+    if (options.cached) {
+        UnloadRenderTexture(floor_cache);
+    }
+    if (options.iso) {
+        UnloadTexture(atlas);
+    }
     UnloadRenderTexture(target);
     UnloadTexture(texture);
     CloseWindow();

@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -25,6 +26,7 @@ struct SDL_Window;
 namespace phantasm {
 
 class Window;
+class TaskPool;
 
 struct RenderStats {
     std::uint32_t sprites = 0; // drawn, after culling
@@ -49,6 +51,11 @@ public:
     // Creates a texture from tightly packed RGBA8 pixels, rows top to bottom.
     // Throws std::invalid_argument on bad sizes, std::runtime_error on GPU failure.
     [[nodiscard]] Texture create_texture(int width, int height, std::span<const std::byte> rgba);
+
+    // Renders a static layer once, in local pixel coordinates, onto a transparent texture.
+    // Call between frames; rebuild after edits. The returned texture must outlive its draws.
+    [[nodiscard]] Texture cache_layer(const Texture& atlas, std::span<const Sprite> sprites,
+                                      int width, int height);
 
     void set_camera(const Camera& camera) noexcept;
     [[nodiscard]] const Camera& camera() const noexcept { return camera_; }
@@ -76,6 +83,11 @@ public:
     // Sprites outside the camera view are culled here, before any sorting.
     // The texture must stay alive until end_frame().
     void draw_sprite(const Texture& texture, const Sprite& sprite);
+    // Single-texture bulk submission. Call on the render thread with immutable input.
+    void draw_sprites(const Texture& texture, std::span<const Sprite> sprites);
+    // Optional workers for bulk preparation and sorted instance gathering; 0 disables.
+    // Call between frames. GPU calls remain on the render thread.
+    void set_worker_count(std::size_t count);
     void end_frame();
 
 private:
@@ -107,6 +119,7 @@ private:
     std::uint64_t frame_start_ns_ = 0;
     SpriteQueue queue_;
     RenderStats stats_{};
+    std::unique_ptr<TaskPool> workers_;
 };
 
 } // namespace phantasm

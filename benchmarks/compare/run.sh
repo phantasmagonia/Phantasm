@@ -7,7 +7,7 @@ mode="${2:-offscreen}"
 suite="${3:-sprites}"
 if [[ "$suite" == "iso" ]]; then
   counts=(1000 10000 50000)   # characters on a 160x160 tile map
-  scenarios=(iso)
+  scenarios=(iso iso-cached)
 else
   counts=(10000 50000 100000 200000)
   scenarios=(plain sorted)

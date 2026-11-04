@@ -1,6 +1,7 @@
 #include <phantasm/sprite_batch.hpp>
 
 #include <phantasm/texture.hpp>
+#include <phantasm/task_pool.hpp>
 
 #include <algorithm>
 #include <array>
@@ -8,6 +9,7 @@
 #include <cstring>
 #include <cstddef>
 #include <limits>
+#include <stdexcept>
 
 namespace phantasm {
 
@@ -20,6 +22,8 @@ constexpr std::uint64_t kDigitMask = kBuckets - 1;
 
 constexpr std::uint32_t kSignBit = 0x8000'0000U;
 constexpr int kLayerBias = 32'768;
+constexpr std::size_t kPrepareGrain = 32'768;
+constexpr std::size_t kParallelThreshold = 131'072;
 
 // Maps a float to an unsigned int with the same ordering (IEEE 754 trick):
 // positives get the sign bit set; negatives are bit-inverted.
@@ -130,6 +134,61 @@ void SpriteQueue::push(const Texture& texture, int layer, float depth,
     textures_.push_back(&texture);
 }
 
+std::size_t SpriteQueue::append(const Texture& texture, std::span<const Sprite> sprites,
+                               Rect view, TaskPool* pool) {
+    if (sprites.empty()) {
+        return 0;
+    }
+    const std::size_t base = size();
+    if (sprites.size() > std::numeric_limits<std::uint32_t>::max() - base) {
+        throw std::length_error("Sprite batch exceeds supported instance count");
+    }
+    keys_.resize(base + sprites.size());
+    instances_.resize(base + sprites.size());
+    textures_.resize(base + sprites.size());
+    batch_counts_.resize(1 + (sprites.size() - 1) / kPrepareGrain);
+    const auto texture_id = static_cast<std::uint16_t>(texture.id());
+    const auto prepare = [&](std::size_t begin, std::size_t end) {
+        std::size_t written = 0;
+        for (std::size_t i = begin; i < end; ++i) {
+            const auto& sprite = sprites[i];
+            const auto rect = sprite_world_rect(sprite);
+            if (!intersects(rect, view)) {
+                continue;
+            }
+            const std::size_t target = base + begin + written++;
+            keys_[target] = sort_key(sprite.layer, sprite.depth, texture_id);
+            instances_[target] = pack_instance(rect, sprite.uv, sprite.tint);
+            textures_[target] = &texture;
+        }
+        batch_counts_[begin / kPrepareGrain] = written;
+    };
+    if (pool != nullptr && sprites.size() >= kParallelThreshold) {
+        pool->parallel_for(sprites.size(), kPrepareGrain, prepare);
+    } else {
+        for (std::size_t begin = 0; begin < sprites.size(); begin += kPrepareGrain) {
+            prepare(begin, std::min(begin + kPrepareGrain, sprites.size()));
+        }
+    }
+    std::size_t end = base;
+    for (std::size_t chunk = 0; chunk < batch_counts_.size(); ++chunk) {
+        const std::size_t source = base + chunk * kPrepareGrain;
+        const std::size_t count = batch_counts_[chunk];
+        if (end != source && count != 0) {
+            std::memmove(keys_.data() + end, keys_.data() + source, count * sizeof(keys_[0]));
+            std::memmove(instances_.data() + end, instances_.data() + source,
+                         count * sizeof(instances_[0]));
+            std::memmove(textures_.data() + end, textures_.data() + source,
+                         count * sizeof(textures_[0]));
+        }
+        end += count;
+    }
+    keys_.resize(end);
+    instances_.resize(end);
+    textures_.resize(end);
+    return end - base;
+}
+
 std::vector<DrawRun> SpriteQueue::sort() {
     reordered_ = radix_sort(keys_, order_);
 
@@ -144,13 +203,26 @@ std::vector<DrawRun> SpriteQueue::sort() {
     return runs;
 }
 
-void SpriteQueue::write_sorted(std::span<SpriteInstance> out) const {
+void SpriteQueue::write_sorted(std::span<SpriteInstance> out, TaskPool* pool) const {
+    if (out.size() < size()) {
+        throw std::invalid_argument("Output span is smaller than the sprite queue");
+    }
+    if (instances_.empty()) {
+        return;
+    }
     if (!reordered_) {
         std::memcpy(out.data(), instances_.data(), instances_.size() * sizeof(SpriteInstance));
         return;
     }
-    for (std::size_t i = 0; i < instances_.size(); ++i) {
-        out[i] = instances_[order_[i]];
+    const auto gather = [&](std::size_t begin, std::size_t end) {
+        for (std::size_t i = begin; i < end; ++i) {
+            out[i] = instances_[order_[i]];
+        }
+    };
+    if (pool != nullptr && size() >= kParallelThreshold) {
+        pool->parallel_for(size(), kPrepareGrain, gather);
+    } else {
+        gather(0, size());
     }
 }
 

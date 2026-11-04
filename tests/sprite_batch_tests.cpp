@@ -1,9 +1,12 @@
 #include <phantasm/sprite_batch.hpp>
 #include <phantasm/texture.hpp>
+#include <phantasm/sprite.hpp>
+#include <phantasm/task_pool.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <vector>
+#include <cstring>
 
 using phantasm::DrawRun;
 using phantasm::SpriteInstance;
@@ -147,4 +150,50 @@ TEST_CASE("Out-of-range uv and tint values are clamped") {
     CHECK(instance.uv[1] == 65535);
     CHECK(instance.tint[0] == 0);
     CHECK(instance.tint[1] == 255);
+}
+
+TEST_CASE("Bulk preparation and parallel gathering match scalar sprite submission") {
+    const Texture texture{nullptr, nullptr, 1, 1};
+    phantasm::TaskPool pool{3};
+    std::vector<phantasm::Sprite> sprites(150'003);
+    for (std::size_t i = 0; i < sprites.size(); ++i) {
+        sprites[i] = {.position = {static_cast<float>(i % 200), static_cast<float>(i % 100)},
+                      .size = {8, 12}, .tint = {1, 0.5F, 0.25F, 0.75F},
+                      .pivot = {0.5F, 1}, .layer = static_cast<int>(i % 3),
+                      .depth = static_cast<float>(i % 7)};
+    }
+    const phantasm::Rect view{0, 0, 100, 100};
+    SpriteQueue scalar;
+    SpriteQueue bulk;
+    push(scalar, texture, -1, 0, -1);
+    push(bulk, texture, -1, 0, -1);
+    std::size_t visible = 0;
+    for (const auto& sprite : sprites) {
+        const auto rect = phantasm::sprite_world_rect(sprite);
+        if (phantasm::intersects(rect, view)) {
+            scalar.push(texture, sprite.layer, sprite.depth,
+                        phantasm::pack_instance(rect, sprite.uv, sprite.tint));
+            ++visible;
+        }
+    }
+    CHECK(bulk.append(texture, sprites, view, &pool) == visible);
+    const auto scalar_runs = scalar.sort();
+    const auto bulk_runs = bulk.sort();
+    REQUIRE(scalar_runs.size() == bulk_runs.size());
+    for (std::size_t i = 0; i < scalar_runs.size(); ++i) {
+        CHECK(scalar_runs[i].first == bulk_runs[i].first);
+        CHECK(scalar_runs[i].count == bulk_runs[i].count);
+        CHECK(scalar_runs[i].texture == bulk_runs[i].texture);
+    }
+    std::vector<SpriteInstance> expected(scalar.size());
+    std::vector<SpriteInstance> actual(bulk.size());
+    scalar.write_sorted(expected);
+    bulk.write_sorted(actual, &pool);
+    REQUIRE(expected.size() == actual.size());
+    CHECK(std::memcmp(expected.data(), actual.data(), actual.size() * sizeof(SpriteInstance)) == 0);
+
+    bulk.clear();
+    CHECK(bulk.append(texture, sprites, {1000, 1000, 1, 1}, &pool) == 0);
+    CHECK(bulk.sort().empty());
+    CHECK(bulk.append(texture, {}, view, &pool) == 0);
 }

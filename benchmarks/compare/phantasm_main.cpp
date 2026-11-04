@@ -20,11 +20,24 @@ public:
           options_{options},
           sprites_{options.iso ? std::vector<compare::Sprite>{} : compare::make_sprites(options.count)},
           texture_{make_texture()} {
+        set_clear_color({20.0F / 255.0F, 22.0F / 255.0F, 28.0F / 255.0F, 1});
+        if (const auto* workers = std::getenv("PHANTASM_WORKERS")) {
+            bulk_ = true;
+            renderer().set_worker_count(static_cast<std::size_t>(std::strtoul(workers, nullptr, 10)));
+        }
         if (options.iso) {
             iso_.emplace(options.count);
             const auto pixels = compare::iso_atlas_pixels();
             atlas_.emplace(renderer().create_texture(compare::kAtlasW, compare::kAtlasH,
                                                      std::as_bytes(std::span{pixels})));
+            if (options.cached) {
+                std::vector<phantasm::Sprite> floors;
+                for (const auto& floor : iso_->floors()) {
+                    floors.push_back(iso_sprite(floor, 0));
+                }
+                floor_cache_.emplace(renderer().cache_layer(*atlas_, floors,
+                    compare::kWindowWidth, compare::kWindowHeight));
+            }
         }
         renderer().set_vsync(false);
         if (options.offscreen) {
@@ -48,6 +61,12 @@ public:
     // PHANTASM_SCREENSHOT=<file.ppm> saves the last offscreen frame (visual check).
     void save_screenshot() {
         const char* path = std::getenv("PHANTASM_SCREENSHOT");
+        if (std::getenv("COMPARE_SCREENSHOT") != nullptr && options_.offscreen) {
+            const auto rgba = renderer().read_offscreen_pixels();
+            compare::save_screenshot(
+                {reinterpret_cast<const std::uint8_t*>(rgba.data()), rgba.size()},
+                compare::kWindowWidth, compare::kWindowHeight);
+        }
         if (path == nullptr || !options_.offscreen) {
             return;
         }
@@ -97,23 +116,41 @@ private:
     // Floors on layer 0 in submission order; walls and characters on layer 1, sorted by
     // the engine using their depth.
     void render_iso() {
-        for (const compare::IsoSprite& floor : iso_->floors()) {
-            draw_iso(floor, 0);
+        if (floor_cache_) {
+            renderer().draw_sprite(*floor_cache_, {.size = {compare::kWindowWidth,
+                                                            compare::kWindowHeight}});
+        } else {
+            for (const compare::IsoSprite& floor : iso_->floors()) {
+                draw_iso(floor, 0);
+            }
         }
-        for (const compare::IsoSprite& object : iso_->objects(false)) {
-            draw_iso(object, 1);
+        const auto& objects = iso_->objects(false);
+        if (bulk_) {
+            batch_.clear();
+            for (const auto& object : objects) {
+                batch_.push_back(iso_sprite(object, 1));
+            }
+            renderer().draw_sprites(*atlas_, batch_);
+        } else {
+            for (const auto& object : objects) {
+                draw_iso(object, 1);
+            }
         }
     }
 
     void draw_iso(const compare::IsoSprite& s, int layer) {
+        renderer().draw_sprite(*atlas_, iso_sprite(s, layer));
+    }
+
+    static phantasm::Sprite iso_sprite(const compare::IsoSprite& s, int layer) {
         constexpr float kU = 1.0F / compare::kAtlasW;
         constexpr float kV = 1.0F / compare::kAtlasH;
-        renderer().draw_sprite(*atlas_, {.position = {s.x, s.y},
+        return {.position = {s.x, s.y},
                                          .size = {s.region.w, s.region.h},
                                          .uv = {s.region.u * kU, s.region.v * kV,
                                                 s.region.w * kU, s.region.h * kV},
                                          .layer = layer,
-                                         .depth = s.depth});
+                                         .depth = s.depth};
     }
 
     phantasm::Texture make_texture() {
@@ -127,6 +164,9 @@ private:
     phantasm::Texture texture_;
     std::optional<compare::IsoScene> iso_;
     std::optional<phantasm::Texture> atlas_;
+    std::optional<phantasm::Texture> floor_cache_;
+    std::vector<phantasm::Sprite> batch_;
+    bool bulk_ = false;
     compare::FrameTimer timer_;
     double submit_ms_ = 0.0;
     double end_frame_ms_ = 0.0;

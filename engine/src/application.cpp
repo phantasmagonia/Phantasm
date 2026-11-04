@@ -50,7 +50,13 @@ void Application::run() {
     while (running_) {
         input_.begin_frame();
         pump_events();
+        if (!running_) {
+            break;
+        }
         on_update(clock.tick(SDL_GetTicksNS()));
+        if (!running_) {
+            break;
+        }
 
         const bool drawing = renderer_.begin_frame(clear_color_);
         if (drawing) {

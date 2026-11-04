@@ -70,6 +70,18 @@ int main(int argc, char** argv) {
         const auto atlas_pixels = compare::iso_atlas_pixels();
         atlas.emplace(sf::Image{{compare::kAtlasW, compare::kAtlasH}, atlas_pixels.data()});
     }
+    std::optional<sf::RenderTexture> floor_cache;
+    if (options.cached) {
+        floor_cache.emplace(kSize);
+        floor_cache->clear(sf::Color::Transparent);
+        vertices.resize(iso->floors().size() * 6);
+        std::size_t quad = 0;
+        for (const auto& floor : iso->floors()) {
+            put_quad(vertices, quad++, floor);
+        }
+        floor_cache->draw(vertices, &*atlas);
+        floor_cache->display();
+    }
     compare::FrameTimer timer;
 
     while (timer.tick()) {
@@ -85,10 +97,14 @@ int main(int argc, char** argv) {
             iso->update(timer.dt());
             const auto& floors = iso->floors();
             const auto& objects = iso->objects(true);
-            vertices.resize((floors.size() + objects.size()) * 6);
+            vertices.resize(((floor_cache ? 0 : floors.size()) + objects.size()) * 6);
             std::size_t quad = 0;
-            for (const auto& floor : floors) {
-                put_quad(vertices, quad++, floor);
+            if (floor_cache) {
+                target.draw(sf::Sprite{floor_cache->getTexture()});
+            } else {
+                for (const auto& floor : floors) {
+                    put_quad(vertices, quad++, floor);
+                }
             }
             for (const auto& object : objects) {
                 put_quad(vertices, quad++, object);
@@ -115,5 +131,10 @@ int main(int argc, char** argv) {
     }
     glFinish(); // include all queued GPU work in the measurement
     timer.finish();
+    if (offscreen && std::getenv("COMPARE_SCREENSHOT") != nullptr) {
+        const auto image = offscreen->getTexture().copyToImage();
+        compare::save_screenshot({image.getPixelsPtr(), compare::kWindowWidth *
+            compare::kWindowHeight * 4}, compare::kWindowWidth, compare::kWindowHeight);
+    }
     timer.report("sfml", options);
 }

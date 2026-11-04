@@ -206,6 +206,20 @@ beating.
 | 100,000 | plain | **1.81** | 3.26 | 7.28 | 6.86 | 1.8x |
 | 200,000 | plain | **3.74** | 6.72 | 14.66 | 14.15 | 1.8x |
 
+**Isometric scene** (offscreen, same conditions): a 160×160 tile map (25,600 floor tiles),
+walls on ~15% of tiles, and N characters walking on the grid; walls and characters are drawn
+in depth order every frame. *Cached floors* renders the floor layer once into a texture in
+every engine (Phantasm: `Renderer::cache_layer`; others: their render-texture APIs).
+
+| Characters | Floors | **Phantasm** | SFML | SDL_Renderer | raylib | Lead |
+|---:|---|---:|---:|---:|---:|---:|
+| 1,000 | drawn every frame | **0.80** | 0.96 | 2.28 | 2.05 | 1.2x |
+| 10,000 | drawn every frame | **1.03** | 1.56 | 3.47 | 3.12 | 1.5x |
+| 50,000 | drawn every frame | **2.07** | 4.68 | 9.02 | 8.30 | 2.3x |
+| 1,000 | cached | **0.17** | 0.36 | 0.42 | 0.41 | 2.2x |
+| 10,000 | cached | **0.40** | 1.18 | 1.53 | 1.46 | 2.9x |
+| 50,000 | cached | **1.51** | 4.45 | 7.21 | 6.63 | 3.0x |
+
 **In a window** (wall-clock, including presentation), results depend on the OS: on macOS the
 compositor intermittently throttles Metal presentation (Phantasm, SDL_Renderer) to 120 fps and
 adds ~17 ms stalls, while OpenGL engines are unaffected, so window-mode numbers vary between
