@@ -249,6 +249,27 @@ benchmarks/compare/run.sh build/compare offscreen   # or: window
 Raycasts suit gameplay line of sight (a few hundred per frame). Map-wide fog of war will use
 tile-grid visibility instead of physics rays.
 
+**Entity store** (`BM_Entity*`, MacBook Air M1, 8 GB, release): medians of three runs. The
+update iterates position and velocity columns; extraction writes one depth value per entity.
+These workloads are smaller than a full simulation or rendered frame.
+
+| Operation | Entities | Time |
+|---|---:|---:|
+| Update packed position and velocity | 1,000,000 | 0.279 ms |
+| Extract depth values | 1,000,000 | 0.534 ms |
+| Create and destroy entities with three components | 1,000,000 | 74.9 ms |
+| Toggle a component on 1% of entities | 1,000,000 | 0.944 ms |
+| Toggle a sidecar flag on the same 1% | 1,000,000 | 0.016 ms |
+
+The flag comparison measures the same 10,000 live handles per iteration. Sidecar flags avoid
+moving packed components; they are for frequently changing booleans, not arbitrary component
+data. Run these benchmarks with
+`./build/release/bin/phantasm_benchmarks --benchmark_filter=BM_Entity`.
+The same one-million-entity update fixture uses **62.9 bytes per entity in array capacity**
+(handles, slots, and three component columns); this excludes allocator and map-node overhead.
+Its component mix differs from the earlier EnTT prototype, so the byte counts are not directly
+comparable.
+
 Box2D's own multithreading is not wired up yet; at these costs it is not needed to fit a
 16.7 ms frame.
 
@@ -271,6 +292,8 @@ Implemented and tested:
 - **World visibility:** chunk index, bounded chunk residency, and background chunk loading.
 - **World updates:** reusable task pool for independent ranges, with worker errors returned
   to the caller.
+- **Entities:** packed component columns grouped by archetype, generational handles, bulk
+  iteration, and a sidecar for frequently toggled flags.
 - **Physics (`phantasm_physics`, opt-in):** Box2D v3 rigid bodies (boxes, circles, static /
   kinematic / dynamic, gravity or top-down), in engine world units, with handles that stay safe
   after a body is destroyed. Collision filters (category/mask), sensors with enter/leave events,
@@ -358,8 +381,17 @@ int main() {
 }
 ```
 
-For a large world, keep objects in game-owned storage and index their world bounds. Update the
-index when an object moves, then submit only IDs returned for the camera view:
+The engine also provides `EntityStore` for packed component data and `EntityFlags` for
+frequently toggled booleans. Include `<phantasm/entity_store.hpp>`; components must support
+move construction and move assignment without throwing. `each` and `each_chunk` provide
+mutable or const iteration. Adding, removing, or destroying components can move them, so
+component pointers and spans must not be kept across structural changes. Structural edits
+inside iteration callbacks are rejected. Runtime handles are generational; persistent IDs
+and scene save/load are still to be implemented.
+
+For a large world, keep objects in game-owned storage and index their world bounds. Keep an
+entity's spatial index entry in sync when its position changes, then submit only IDs returned
+for the camera view:
 
 ```cpp
 phantasm::ChunkIndex index{256.0F};

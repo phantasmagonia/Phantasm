@@ -56,6 +56,10 @@ MacBook Air M1 8 GB, release, own store vs. EnTT v3.16: update 1M 1.35 vs 1.50-2
 extraction 1M 1.59 vs 3.10 ms; mixed iso world (100k movers) 291 vs 520 us; spawn/despawn churn
 1M 2.03 vs 3.42 ms; memory 47.0 vs 56.5 B/entity. EnTT won add/remove of a component (0.31 vs
 3.35 ms for 1% of 1M per frame), so frequently toggled tags live outside archetypes.
+The engine now exposes `EntityStore` and `EntityFlags`; the current implementation benchmarks
+are in README. Components must be nothrow movable. Structural changes invalidate component
+pointers and iteration spans; callbacks cannot make structural changes. Save/load and stable
+persistent IDs are still pending.
 
 Open architecture decisions (benchmark before choosing): job system with dependencies, render
 graph for lighting/fog passes, asset pipeline with async loading by handle.
