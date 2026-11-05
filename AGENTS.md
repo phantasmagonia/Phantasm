@@ -108,6 +108,10 @@ Phantasm will ship games on iOS and Android as well as desktop. Keep the runtime
 - Budget memory, texture sizes, and battery/thermals: measure on the smallest target device,
   not only on desktop.
 - Shaders already compile to SPIR-V (Android Vulkan) and MSL (iOS Metal).
+- **Headless servers are a target:** simulation (entities, physics, AI, world streaming) must run
+  without a window or GPU. Never make simulation code depend on `Renderer`, `Window`, or SDL
+  video; keep rendering a consumer of simulation state. Multiplayer is planned as
+  server-authoritative with per-player interest management (chunks).
 
 ## Layout and dependency rules
 
