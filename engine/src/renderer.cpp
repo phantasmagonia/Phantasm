@@ -435,6 +435,10 @@ bool Renderer::set_vsync(bool enabled) {
     return true;
 }
 
+Vec2 Renderer::screen_to_world(Vec2 screen_pixels) const noexcept {
+    return phantasm::screen_to_world(camera_, viewport_, screen_pixels);
+}
+
 void Renderer::set_camera(const Camera& camera) noexcept {
     camera_ = camera;
     visible_ = visible_world_rect(camera_, viewport_);

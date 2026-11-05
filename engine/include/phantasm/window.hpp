@@ -24,6 +24,8 @@ public:
     Window& operator=(Window&&) = delete;
 
     [[nodiscard]] SDL_Window* native_handle() const noexcept { return handle_; }
+    // Drawable pixels per window coordinate (2 on most Retina displays when high density is on).
+    [[nodiscard]] float pixel_density() const noexcept;
 
 private:
     SDL_Window* handle_;

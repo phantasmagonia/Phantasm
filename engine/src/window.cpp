@@ -16,6 +16,11 @@ Window::Window(const WindowConfig& config)
     }
 }
 
+float Window::pixel_density() const noexcept {
+    const float density = SDL_GetWindowPixelDensity(handle_);
+    return density > 0.0F ? density : 1.0F;
+}
+
 Window::~Window() {
     SDL_DestroyWindow(handle_);
 }

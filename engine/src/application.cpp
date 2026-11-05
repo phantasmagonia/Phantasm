@@ -5,6 +5,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -37,6 +38,21 @@ bool to_key(SDL_Scancode scancode, Key& out) noexcept {
     }
     out = static_cast<Key>(index);
     return true;
+}
+
+} // namespace
+
+namespace {
+
+std::optional<MouseButton> to_mouse_button(Uint8 button) noexcept {
+    switch (button) {
+    case SDL_BUTTON_LEFT: return MouseButton::Left;
+    case SDL_BUTTON_MIDDLE: return MouseButton::Middle;
+    case SDL_BUTTON_RIGHT: return MouseButton::Right;
+    case SDL_BUTTON_X1: return MouseButton::X1;
+    case SDL_BUTTON_X2: return MouseButton::X2;
+    default: return std::nullopt;
+    }
 }
 
 } // namespace
@@ -81,6 +97,20 @@ void Application::pump_events() {
         case SDL_EVENT_QUIT:
             request_quit();
             break;
+        case SDL_EVENT_MOUSE_MOTION:
+            input_.set_mouse_position({event.motion.x, event.motion.y});
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (const auto button = to_mouse_button(event.button.button)) {
+                input_.set_mouse_button(*button, event.button.down);
+            }
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            input_.add_mouse_wheel(event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED
+                                       ? -event.wheel.y
+                                       : event.wheel.y);
+            break;
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP: {
             Key key{};
@@ -93,6 +123,12 @@ void Application::pump_events() {
             break;
         }
     }
+}
+
+Vec2 Application::pointer_world() const noexcept {
+    const float density = window_.pixel_density();
+    const Vec2 mouse = input_.mouse_position();
+    return renderer_.screen_to_world({mouse.x * density, mouse.y * density});
 }
 
 } // namespace phantasm

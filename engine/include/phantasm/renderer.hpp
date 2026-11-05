@@ -61,6 +61,9 @@ public:
     [[nodiscard]] const Camera& camera() const noexcept { return camera_; }
     // Current drawable-area bounds in world coordinates, set by begin_frame().
     [[nodiscard]] Rect visible_rect() const noexcept { return visible_; }
+    // Screen pixels of the drawable area (origin top-left) to world units, using the
+    // current camera and the viewport of the last frame.
+    [[nodiscard]] Vec2 screen_to_world(Vec2 screen_pixels) const noexcept;
     [[nodiscard]] const RenderStats& last_stats() const noexcept { return stats_; }
     // Borrowed handles for tools that submit their own SDL_GPU passes; never release them.
     [[nodiscard]] SDL_GPUDevice* native_device() const noexcept { return device_; }

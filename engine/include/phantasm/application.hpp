@@ -40,6 +40,8 @@ protected:
     [[nodiscard]] Renderer& renderer() noexcept { return renderer_; }
 
     [[nodiscard]] const Input& input() const noexcept { return input_; }
+    // World position under the mouse pointer (for aiming and picking).
+    [[nodiscard]] Vec2 pointer_world() const noexcept;
 
     void set_clear_color(Color color) noexcept { clear_color_ = color; }
 

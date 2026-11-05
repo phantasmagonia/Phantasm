@@ -138,3 +138,23 @@ TEST_CASE("Cached layers preserve transparent edges and tinted alpha") {
     CHECK_THROWS_AS(renderer.cache_layer(source, sprites, 16, 16), std::logic_error);
     renderer.end_frame();
 }
+
+TEST_CASE("The renderer maps screen pixels to world positions through its camera") {
+    auto harness = make_harness();
+    if (!harness) {
+        SKIP("No GPU device available");
+    }
+    phantasm::Renderer& renderer = harness->renderer();
+    renderer.set_offscreen(64, 32);
+    renderer.set_camera({.position = {100.0F, 50.0F}, .zoom = 2.0F});
+    REQUIRE(renderer.begin_frame({0.0F, 0.0F, 0.0F, 1.0F}));
+    renderer.end_frame();
+
+    const phantasm::Vec2 center = renderer.screen_to_world({32.0F, 16.0F});
+    const phantasm::Vec2 corner = renderer.screen_to_world({0.0F, 0.0F});
+
+    CHECK(center.x == 100.0F);
+    CHECK(center.y == 50.0F);
+    CHECK(corner.x == 84.0F);
+    CHECK(corner.y == 42.0F);
+}
