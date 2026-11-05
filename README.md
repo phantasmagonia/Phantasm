@@ -544,6 +544,11 @@ which builds against a pinned Phantasm commit. This repository contains no art.
 | `tests/` | Catch2 unit tests |
 | `benchmarks/` | Google Benchmark microbenchmarks for hot paths |
 
+## Contributing
+
+Contributions are welcome. A Contributor License Agreement is required; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 Copyright (c) 2026 Halil Ahmet Çengeloğlu. Phantasm's project-owned code and documentation are
