@@ -67,6 +67,9 @@ persistent IDs are still pending.
 Open architecture decisions (benchmark before choosing): job system with dependencies, render
 graph for lighting/fog passes, asset pipeline with async loading by handle.
 
+Decided: **audio uses miniaudio** (public domain / MIT-0) in an opt-in `phantasm_audio` library
+(servers omit it). Sounds that AI can hear are simulation events, separate from audio playback.
+
 Apply these checks when designing or reviewing a subsystem:
 
 - **Entity storage:** use the archetype store; keep per-frame hot paths as bulk column loops.
