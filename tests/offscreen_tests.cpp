@@ -158,3 +158,97 @@ TEST_CASE("The renderer maps screen pixels to world positions through its camera
     CHECK(corner.x == 84.0F);
     CHECK(corner.y == 42.0F);
 }
+
+namespace {
+
+std::vector<std::byte> red_blue_pixels() {
+    return {std::byte{255}, std::byte{0}, std::byte{0}, std::byte{255},
+            std::byte{0},   std::byte{0}, std::byte{255}, std::byte{255}};
+}
+
+// 64x64 black/white checkerboard of 1-pixel squares: averages to mid gray.
+std::vector<std::byte> fine_checker() {
+    std::vector<std::byte> pixels(64U * 64U * 4U);
+    for (std::size_t y = 0; y < 64; ++y) {
+        for (std::size_t x = 0; x < 64; ++x) {
+            const auto value = std::byte{((x + y) % 2 == 0) ? std::uint8_t{255} : std::uint8_t{0}};
+            const std::size_t i = (y * 64 + x) * 4;
+            pixels[i] = value;
+            pixels[i + 1] = value;
+            pixels[i + 2] = value;
+            pixels[i + 3] = std::byte{255};
+        }
+    }
+    return pixels;
+}
+
+std::vector<std::byte> render_scaled(phantasm::Renderer& renderer, const phantasm::Texture& texture,
+                                     float width, float height) {
+    REQUIRE(renderer.begin_frame({0.0F, 0.0F, 0.0F, 1.0F}));
+    renderer.draw_sprite(texture, {.position = {0.0F, 0.0F}, .size = {width, height}});
+    renderer.end_frame();
+    return renderer.read_offscreen_pixels();
+}
+
+} // namespace
+
+TEST_CASE("Nearest filtering keeps hard texel edges when magnified") {
+    auto harness = make_harness();
+    if (!harness) {
+        SKIP("No GPU device available");
+    }
+    phantasm::Renderer& renderer = harness->renderer();
+    renderer.set_offscreen(64, 8);
+    renderer.set_camera({.position = {32.0F, 4.0F}});
+    const auto texture = renderer.create_texture(2, 1, red_blue_pixels());
+
+    const auto pixels = render_scaled(renderer, texture, 64.0F, 8.0F);
+
+    CHECK(pixel_at(pixels, 64, 30, 4) == std::array{255, 0, 0, 255});
+    CHECK(pixel_at(pixels, 64, 33, 4) == std::array{0, 0, 255, 255});
+}
+
+TEST_CASE("Linear filtering blends neighboring texels when magnified") {
+    auto harness = make_harness();
+    if (!harness) {
+        SKIP("No GPU device available");
+    }
+    phantasm::Renderer& renderer = harness->renderer();
+    renderer.set_offscreen(64, 8);
+    renderer.set_camera({.position = {32.0F, 4.0F}});
+    const auto texture =
+        renderer.create_texture(2, 1, red_blue_pixels(), phantasm::TextureFilter::Linear);
+    CHECK(texture.filter() == phantasm::TextureFilter::Linear);
+
+    const auto pixels = render_scaled(renderer, texture, 64.0F, 8.0F);
+    const auto middle = pixel_at(pixels, 64, 32, 4);
+
+    CHECK(middle[0] > 80);
+    CHECK(middle[0] < 175);
+    CHECK(middle[2] > 80);
+    CHECK(middle[2] < 175);
+}
+
+TEST_CASE("Linear textures use mipmaps when minified, averaging fine detail") {
+    auto harness = make_harness();
+    if (!harness) {
+        SKIP("No GPU device available");
+    }
+    phantasm::Renderer& renderer = harness->renderer();
+    renderer.set_offscreen(4, 4);
+    renderer.set_camera({.position = {2.0F, 2.0F}});
+    const auto smooth =
+        renderer.create_texture(64, 64, fine_checker(), phantasm::TextureFilter::Linear);
+
+    const auto pixels = render_scaled(renderer, smooth, 4.0F, 4.0F);
+
+    // 16x16 checker texels per screen pixel average to ~128; without mipmaps a single
+    // texel (0 or 255) would be sampled.
+    for (int y = 0; y < 4; ++y) {
+        for (int x = 0; x < 4; ++x) {
+            const int gray = pixel_at(pixels, 4, x, y)[0];
+            CHECK(gray > 100);
+            CHECK(gray < 156);
+        }
+    }
+}

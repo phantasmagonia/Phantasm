@@ -47,10 +47,12 @@ public:
     Renderer& operator=(Renderer&&) = delete;
 
     // Loads a PNG or JPEG file. Throws std::runtime_error on failure.
-    [[nodiscard]] Texture load_texture(const std::string& path);
+    [[nodiscard]] Texture load_texture(const std::string& path,
+                                       TextureFilter filter = TextureFilter::Nearest);
     // Creates a texture from tightly packed RGBA8 pixels, rows top to bottom.
     // Throws std::invalid_argument on bad sizes, std::runtime_error on GPU failure.
-    [[nodiscard]] Texture create_texture(int width, int height, std::span<const std::byte> rgba);
+    [[nodiscard]] Texture create_texture(int width, int height, std::span<const std::byte> rgba,
+                                         TextureFilter filter = TextureFilter::Nearest);
 
     // Renders a static layer once, in local pixel coordinates, onto a transparent texture.
     // Call between frames; rebuild after edits. The returned texture must outlive its draws.
@@ -106,7 +108,8 @@ private:
     SDL_GPUDevice* device_ = nullptr;
     SDL_Window* window_ = nullptr;
     SDL_GPUGraphicsPipeline* sprite_pipeline_ = nullptr;
-    SDL_GPUSampler* sampler_ = nullptr;
+    SDL_GPUSampler* sampler_ = nullptr;        // TextureFilter::Nearest
+    SDL_GPUSampler* linear_sampler_ = nullptr; // TextureFilter::Linear (with mipmaps)
     SDL_GPUTexture* offscreen_ = nullptr;
     int offscreen_width_ = 0;
     int offscreen_height_ = 0;

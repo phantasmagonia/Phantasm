@@ -11,10 +11,11 @@ namespace {
 std::atomic<std::uint32_t> next_texture_id{1};
 }
 
-Texture::Texture(SDL_GPUDevice* device, SDL_GPUTexture* handle, int width, int height) noexcept
+Texture::Texture(SDL_GPUDevice* device, SDL_GPUTexture* handle, int width, int height,
+                 TextureFilter filter) noexcept
     : device_{device}, handle_{handle},
       id_{next_texture_id.fetch_add(1, std::memory_order_relaxed)}, width_{width},
-      height_{height} {}
+      height_{height}, filter_{filter} {}
 
 Texture::~Texture() {
     release();

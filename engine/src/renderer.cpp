@@ -34,6 +34,16 @@ constexpr SDL_GPUShaderFormat kShaderFormats =
     SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL;
 
 constexpr int kMaxTextureSize = 16384;
+constexpr float kMaxMipLod = 1000.0F;
+
+// Levels down to 1x1: 64x64 -> 7 levels (64, 32, ..., 1).
+Uint32 mip_level_count(Uint32 width, Uint32 height) noexcept {
+    Uint32 levels = 1;
+    for (Uint32 size = std::max(width, height); size > 1; size /= 2) {
+        ++levels;
+    }
+    return levels;
+}
 constexpr Uint32 kBytesPerPixel = 4;
 constexpr Uint32 kQuadVertexCount = 6;
 constexpr Uint32 kInitialInstanceCapacity = 1024;
@@ -160,6 +170,9 @@ void Renderer::destroy() noexcept {
     if (sampler_ != nullptr) {
         SDL_ReleaseGPUSampler(device_, sampler_);
     }
+    if (linear_sampler_ != nullptr) {
+        SDL_ReleaseGPUSampler(device_, linear_sampler_);
+    }
     if (sprite_pipeline_ != nullptr) {
         SDL_ReleaseGPUGraphicsPipeline(device_, sprite_pipeline_);
     }
@@ -228,9 +241,19 @@ void Renderer::create_sprite_pipeline() {
     if (sampler_ == nullptr) {
         throw_sdl_error("Creating sampler");
     }
+
+    SDL_GPUSamplerCreateInfo linear = sampler;
+    linear.min_filter = SDL_GPU_FILTER_LINEAR;
+    linear.mag_filter = SDL_GPU_FILTER_LINEAR;
+    linear.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+    linear.max_lod = kMaxMipLod; // a zero max_lod would lock sampling to the full-size level
+    linear_sampler_ = SDL_CreateGPUSampler(device_, &linear);
+    if (linear_sampler_ == nullptr) {
+        throw_sdl_error("Creating linear sampler");
+    }
 }
 
-Texture Renderer::load_texture(const std::string& path) {
+Texture Renderer::load_texture(const std::string& path, TextureFilter filter) {
     std::size_t file_size = 0;
     const auto file = load_file(path, file_size);
     const detail::Image image =
@@ -240,13 +263,14 @@ Texture Renderer::load_texture(const std::string& path) {
     try {
         return create_texture(
             image.width, image.height,
-            std::span{reinterpret_cast<const std::byte*>(image.pixels.get()), byte_count});
+            std::span{reinterpret_cast<const std::byte*>(image.pixels.get()), byte_count}, filter);
     } catch (const std::exception& error) {
         throw std::runtime_error(path + ": " + error.what());
     }
 }
 
-Texture Renderer::create_texture(int width_px, int height_px, std::span<const std::byte> rgba) {
+Texture Renderer::create_texture(int width_px, int height_px, std::span<const std::byte> rgba,
+                                 TextureFilter filter) {
     if (width_px <= 0 || height_px <= 0 || width_px > kMaxTextureSize ||
         height_px > kMaxTextureSize) {
         throw std::invalid_argument("Texture size must be 1.." +
@@ -262,13 +286,17 @@ Texture Renderer::create_texture(int width_px, int height_px, std::span<const st
     SDL_GPUTextureCreateInfo texture_info{};
     texture_info.type = SDL_GPU_TEXTURETYPE_2D;
     texture_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    texture_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    const bool mipmapped = filter == TextureFilter::Linear;
+    // Generating mipmaps renders into the texture, so it must also be a color target.
+    texture_info.usage = mipmapped ? SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
+                                   : SDL_GPU_TEXTUREUSAGE_SAMPLER;
     texture_info.width = width;
     texture_info.height = height;
     texture_info.layer_count_or_depth = 1;
-    texture_info.num_levels = 1;
+    texture_info.num_levels = mipmapped ? mip_level_count(width, height) : 1;
     // Wrap immediately so the texture is released if anything below throws.
-    Texture texture{device_, SDL_CreateGPUTexture(device_, &texture_info), width_px, height_px};
+    Texture texture{device_, SDL_CreateGPUTexture(device_, &texture_info), width_px, height_px,
+                    filter};
     if (texture.native_handle() == nullptr) {
         throw_sdl_error("Creating texture");
     }
@@ -313,6 +341,9 @@ Texture Renderer::create_texture(int width_px, int height_px, std::span<const st
     destination.d = 1;
     SDL_UploadToGPUTexture(copy, &source, &destination, false);
     SDL_EndGPUCopyPass(copy);
+    if (mipmapped) {
+        SDL_GenerateMipmapsForGPUTexture(commands, texture.native_handle());
+    }
     if (!SDL_SubmitGPUCommandBuffer(commands)) {
         throw_sdl_error("Submitting texture upload");
     }
@@ -554,8 +585,9 @@ void Renderer::record_draws(const std::vector<DrawRun>& runs) {
         SDL_PushGPUVertexUniformData(commands_, 0, &uniforms, sizeof(uniforms));
 
         for (const DrawRun& run : runs) {
-            const SDL_GPUTextureSamplerBinding sampler_binding{run.texture->native_handle(),
-                                                               sampler_};
+            const SDL_GPUTextureSamplerBinding sampler_binding{
+                run.texture->native_handle(),
+                run.texture->filter() == TextureFilter::Linear ? linear_sampler_ : sampler_};
             SDL_BindGPUFragmentSamplers(pass, 0, &sampler_binding, 1);
             // Offsetting the binding (not first_instance) works on every backend.
             const SDL_GPUBufferBinding instances{

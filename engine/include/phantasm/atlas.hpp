@@ -55,7 +55,10 @@ struct Atlas {
 };
 
 // Throws std::runtime_error if the images don't fit max_size.
+// Use TextureFilter::Linear for high-resolution art; padding then also limits bleeding
+// between images in smaller mipmap levels.
 [[nodiscard]] Atlas build_atlas(Renderer& renderer, std::span<const ImageView> images,
-                                int max_size = 4096, int padding = 2);
+                                int max_size = 4096, int padding = 2,
+                                TextureFilter filter = TextureFilter::Nearest);
 
 } // namespace phantasm

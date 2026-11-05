@@ -101,7 +101,7 @@ std::vector<std::byte> compose_atlas(int atlas_size, std::span<const ImageView> 
 }
 
 Atlas build_atlas(Renderer& renderer, std::span<const ImageView> images, int max_size,
-                  int padding) {
+                  int padding, TextureFilter filter) {
     std::vector<Size> sizes;
     sizes.reserve(images.size());
     for (const ImageView& image : images) {
@@ -120,7 +120,7 @@ Atlas build_atlas(Renderer& renderer, std::span<const ImageView> images, int max
         uvs.push_back(region_uv(packed->positions[i], sizes[i], packed->atlas_size));
     }
     return Atlas{
-        .texture = renderer.create_texture(packed->atlas_size, packed->atlas_size, pixels),
+        .texture = renderer.create_texture(packed->atlas_size, packed->atlas_size, pixels, filter),
         .uvs = std::move(uvs),
         .sizes = std::move(sizes),
     };

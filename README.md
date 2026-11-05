@@ -303,6 +303,11 @@ Implemented and tested:
 - **Camera:** world-space 2D camera with pan and zoom.
 - **Sprites:** pivot/anchor point, UV rect, tint, layer, depth.
 - **Texture atlas:** packs many images into one texture (stb_rect_pack) so sprites batch together.
+- **Texture filtering per texture:** `TextureFilter::Nearest` for crisp pixel art and UI, or
+  `TextureFilter::Linear` for high-resolution art, with mipmaps generated on upload so zoomed-out
+  art stays smooth instead of shimmering.
+- **Mouse input:** position, delta, buttons (short clicks are never lost), and wheel;
+  `Application::pointer_world()` gives the world position under the pointer for aiming.
 - **Isometric layer (`phantasm_iso`):** 2:1 diamond grid ↔ world projection, multiple floor levels,
   tile picking, draw-depth helpers.
 
