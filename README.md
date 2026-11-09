@@ -313,7 +313,8 @@ Implemented and tested:
 - **Mouse input:** position, delta, buttons (short clicks are never lost), and wheel;
   `Application::pointer_world()` gives the world position under the pointer for aiming.
 - **Isometric layer (`phantasm_iso`):** 2:1 diamond grid ↔ world projection, multiple floor levels,
-  tile picking, draw-depth helpers.
+  tile picking, draw-depth helpers. `FloorVisibility` lets games classify roof/wall tiles,
+  hide upper floors when a viewer is indoors, and fade nearby foreground walls.
 
 - **World visibility:** chunk index, bounded chunk residency, and background chunk loading.
 - **World updates:** reusable task pool for independent ranges, with worker errors returned
@@ -333,6 +334,18 @@ Implemented and tested:
   after a body is destroyed. Collision filters (category/mask), sensors with enter/leave events,
   raycasts, and area queries. `FixedStep` turns frame times into fixed simulation steps.
 - **Benchmarks:** Google Benchmark microbenchmarks plus end-to-end GPU benchmark modes.
+
+Games provide tile meanings and indoor state; the visibility policy returns an opacity to
+apply to each tile sprite's tint before submission:
+
+```cpp
+phantasm::iso::FloorVisibility visibility;
+visibility.set_role('R', phantasm::iso::TileRole::Roof);
+visibility.set_role('#', phantasm::iso::TileRole::Wall);
+const auto alpha = visibility.opacity(tile, static_cast<unsigned char>(map.at(tile)),
+                                      {{player.x, player.y, player.level}, indoors});
+// Skip alpha == 0; otherwise set sprite.tint.a = alpha before draw_sprite().
+```
 
 ## Build
 

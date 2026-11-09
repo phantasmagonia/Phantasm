@@ -3,6 +3,7 @@ add_library(phantasm_iso
     src/scene.cpp
     src/scene_history.cpp
     src/tile_map.cpp
+    src/visibility.cpp
 )
 add_library(phantasm::iso ALIAS phantasm_iso)
 
