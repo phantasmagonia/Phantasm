@@ -12,6 +12,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 struct SDL_GPUBuffer;
@@ -27,6 +28,8 @@ namespace phantasm {
 
 class Window;
 class TaskPool;
+class FontFace;
+struct TextLayout;
 
 struct RenderStats {
     std::uint32_t sprites = 0; // drawn, after culling
@@ -93,6 +96,11 @@ public:
     void draw_sprite(const Texture& texture, const Sprite& sprite);
     // Single-texture bulk submission. Call on the render thread with immutable input.
     void draw_sprites(const Texture& texture, std::span<const Sprite> sprites);
+    // Draws glyphs from a texture created with FontFace::atlas_pixels().
+    void draw_text(const Texture& atlas, const FontFace& face, std::string_view text,
+                   Vec2 position, Color color = {1.0F, 1.0F, 1.0F, 1.0F}, int layer = 0);
+    void draw_text_layout(const Texture& atlas, const TextLayout& layout, Vec2 position,
+                          Color color = {1.0F, 1.0F, 1.0F, 1.0F}, int layer = 0);
     // Optional workers for bulk preparation and sorted instance gathering; 0 disables.
     // Call between frames. GPU calls remain on the render thread.
     void set_worker_count(std::size_t count);

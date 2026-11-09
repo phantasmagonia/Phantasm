@@ -1,10 +1,13 @@
 #include <phantasm/application.hpp>
 #include <phantasm/pixel_format.hpp>
 #include <phantasm/renderer.hpp>
+#include <phantasm/text.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <fstream>
+#include <iterator>
 #include <cstddef>
 #include <exception>
 #include <memory>
@@ -251,4 +254,46 @@ TEST_CASE("Linear textures use mipmaps when minified, averaging fine detail") {
             CHECK(gray < 156);
         }
     }
+}
+
+TEST_CASE("Text draws its glyph coverage in the requested color") {
+    auto harness = make_harness();
+    if (!harness) {
+        SKIP("No GPU device available");
+    }
+    const std::array candidates{"/System/Library/Fonts/Supplemental/Arial.ttf",
+                                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                                "C:/Windows/Fonts/arial.ttf"};
+    std::vector<std::byte> font_bytes;
+    for (const char* path : candidates) {
+        std::ifstream file{path, std::ios::binary};
+        if (file) {
+            const std::vector<char> chars{std::istreambuf_iterator<char>{file}, {}};
+            for (const char c : chars) {
+                font_bytes.push_back(static_cast<std::byte>(c));
+            }
+            break;
+        }
+    }
+    if (font_bytes.empty()) {
+        SKIP("No system font found");
+    }
+    phantasm::Renderer& renderer = harness->renderer();
+    const auto face = phantasm::FontFace::parse(font_bytes, 48.0F, {.characters = U"I"});
+    const auto atlas = renderer.create_texture(face.atlas_width(), face.atlas_height(),
+                                               face.atlas_pixels());
+    renderer.set_offscreen(64, 64);
+    renderer.set_camera({.position = {32.0F, 32.0F}}); // world units = pixels
+
+    REQUIRE(renderer.begin_frame({0.0F, 0.0F, 1.0F, 1.0F}));
+    renderer.draw_text(atlas, face, "I", {8.0F, 4.0F}, {1.0F, 0.0F, 0.0F, 1.0F}, 0);
+    renderer.end_frame();
+    const auto pixels = renderer.read_offscreen_pixels();
+
+    // Center of the "I" stroke, from the layout, offset by the draw position.
+    const auto glyph = face.layout("I").glyphs.at(0).rect;
+    const int cx = static_cast<int>(8.0F + glyph.x + glyph.w / 2.0F);
+    const int cy = static_cast<int>(4.0F + glyph.y + glyph.h / 2.0F);
+    CHECK(pixel_at(pixels, 64, cx, cy) == std::array{255, 0, 0, 255});
+    CHECK(pixel_at(pixels, 64, 62, 62) == std::array{0, 0, 255, 255});
 }

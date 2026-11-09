@@ -16,6 +16,7 @@ add_library(phantasm
     src/sprite.cpp
     src/sprite_batch.cpp
     src/task_pool.cpp
+    src/text.cpp
     src/texture.cpp
     src/window.cpp
 )

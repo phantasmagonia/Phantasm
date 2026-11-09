@@ -20,6 +20,7 @@ FetchContent_MakeAvailable(stb)
 add_library(stb STATIC
     "${PROJECT_SOURCE_DIR}/third_party/stb_image.c"
     "${PROJECT_SOURCE_DIR}/third_party/stb_rect_pack.c"
+    "${PROJECT_SOURCE_DIR}/third_party/stb_truetype.c"
 )
 target_include_directories(stb SYSTEM PUBLIC "${stb_SOURCE_DIR}")
 

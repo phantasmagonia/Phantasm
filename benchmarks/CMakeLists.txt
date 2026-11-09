@@ -6,6 +6,7 @@ add_executable(phantasm_benchmarks
     iso_prepare_bench.cpp
     scene_bench.cpp
     sprite_batch_bench.cpp
+    text_bench.cpp
     world_update_bench.cpp
 )
 target_link_libraries(phantasm_benchmarks

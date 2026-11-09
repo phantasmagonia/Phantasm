@@ -17,6 +17,7 @@ add_executable(phantasm_tests
     sprite_batch_tests.cpp
     sort_key_tests.cpp
     task_pool_tests.cpp
+    text_tests.cpp
     sprite_tests.cpp
     scene_tests.cpp
     tile_map_tests.cpp
