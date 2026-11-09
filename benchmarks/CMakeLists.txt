@@ -4,6 +4,7 @@ add_executable(phantasm_benchmarks
     entity_store_bench.cpp
     editor_tile_bench.cpp
     iso_bench.cpp
+    pathfinding_bench.cpp
     iso_prepare_bench.cpp
     scene_bench.cpp
     sprite_batch_bench.cpp

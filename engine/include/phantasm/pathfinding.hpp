@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -38,5 +39,25 @@ struct PathOptions {
 // Cheapest path from start to goal, inclusive of both; empty if there is none.
 [[nodiscard]] std::vector<Cell> find_path(const NavGrid& grid, Cell start, Cell goal,
                                           PathOptions options = {});
+
+// Distance-to-goal and best next step for every cell, for many agents sharing goals
+// (e.g. monsters chasing players). Same movement rules as find_path.
+class FlowField {
+public:
+    [[nodiscard]] static FlowField build(const NavGrid& grid, std::span<const Cell> goals,
+                                         PathOptions options = {});
+
+    // Cost of the cheapest route to the nearest goal; infinity if unreachable or outside.
+    [[nodiscard]] float distance(Cell cell) const noexcept;
+    [[nodiscard]] bool reachable(Cell cell) const noexcept;
+    // The neighbor one step closer to a goal; nullopt at a goal or when unreachable.
+    [[nodiscard]] std::optional<Cell> next(Cell cell) const noexcept;
+
+private:
+    int width_ = 0;
+    int height_ = 0;
+    std::vector<float> distance_;
+    std::vector<int> next_; // index of the next cell, -1 for none
+};
 
 } // namespace phantasm

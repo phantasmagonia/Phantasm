@@ -306,6 +306,13 @@ Implemented and tested:
 - **Texture filtering per texture:** `TextureFilter::Nearest` for crisp pixel art and UI, or
   `TextureFilter::Linear` for high-resolution art, with mipmaps generated on upload so zoomed-out
   art stays smooth instead of shimmering.
+- **Pathfinding:** `NavGrid` (per-cell cost; 0 = blocked) with A* (`find_path`: 8-way, no
+  corner cutting, terrain costs, deterministic) and `FlowField` for crowds (one field from one or
+  more goals; every agent reads its next step in constant time). Tested against an exhaustive
+  reference search on random terrain. On a 512×512 map with 20% walls (MacBook Air M1, 8 GB,
+  release): A* across the whole map 17.1 ms; a full-map flow field 20.7 ms; 10,000 agents reading
+  their next step 32.6 µs. Region-limited fields and hierarchical A* are planned for faster
+  rebuilds on large maps.
 - **Fog of war and line of sight (`TileFog`):** per-player tile visibility using recursive
   shadowcasting (Visible / Explored / Unseen), several viewers per player, memory only for
   explored 32×32 chunks, plus a tile line-of-sight check. A 1024×1024 map with 20% walls,

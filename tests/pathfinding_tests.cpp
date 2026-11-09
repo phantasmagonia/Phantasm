@@ -197,3 +197,110 @@ TEST_CASE("Paths are as cheap as an exhaustive search finds, on random terrain")
         }
     }
 }
+
+using phantasm::FlowField;
+
+TEST_CASE("A flow field's goal has distance zero and no next step") {
+    const NavGrid grid{5, 5};
+    const std::vector<Cell> goals{{2, 2}};
+
+    const auto field = FlowField::build(grid, goals);
+
+    CHECK(field.reachable({2, 2}));
+    CHECK(field.distance({2, 2}) == 0.0F);
+    CHECK_FALSE(field.next({2, 2}).has_value());
+}
+
+TEST_CASE("Every next step moves strictly closer to the goal") {
+    NavGrid grid{8, 8};
+    for (int y = 0; y < 6; ++y) {
+        grid.set_cost({4, y}, 0);
+    }
+    const std::vector<Cell> goals{{7, 0}};
+    const auto field = FlowField::build(grid, goals);
+
+    int checked = 0;
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            const Cell cell{x, y};
+            if (!field.reachable(cell) || cell == goals[0]) {
+                continue;
+            }
+            const auto step = field.next(cell);
+            REQUIRE(step.has_value());
+            CHECK(field.distance(*step) < field.distance(cell));
+            CHECK(std::abs(step->x - x) <= 1);
+            CHECK(std::abs(step->y - y) <= 1);
+            ++checked;
+        }
+    }
+    // Every open cell can reach the goal around the wall's gap (8x8 minus 6 wall cells).
+    CHECK(checked == 64 - 6 - 1);
+}
+
+TEST_CASE("Cells that cannot reach any goal have no next step") {
+    NavGrid grid{5, 5};
+    for (int y = 0; y < 5; ++y) {
+        grid.set_cost({2, y}, 0); // a full wall splits the grid
+    }
+    const std::vector<Cell> goals{{4, 2}};
+
+    const auto field = FlowField::build(grid, goals);
+
+    CHECK_FALSE(field.reachable({0, 2}));
+    CHECK_FALSE(field.next({0, 2}).has_value());
+    CHECK_FALSE(field.reachable({2, 2})); // the wall itself
+    CHECK_FALSE(field.reachable({9, 9})); // outside the grid
+}
+
+TEST_CASE("With several goals each cell heads for the nearest one") {
+    const NavGrid grid{11, 1};
+    const std::vector<Cell> goals{{0, 0}, {10, 0}};
+
+    const auto field = FlowField::build(grid, goals);
+
+    CHECK(field.distance({3, 0}) == 3.0F);
+    CHECK(field.next({3, 0}) == Cell{2, 0});
+    CHECK(field.distance({8, 0}) == 2.0F);
+    CHECK(field.next({8, 0}) == Cell{9, 0});
+}
+
+TEST_CASE("Following a flow field reaches a goal at the cost A* finds, on random terrain") {
+    std::mt19937 rng{7};
+    std::uniform_int_distribution<int> coord{0, 15};
+    std::uniform_int_distribution<int> terrain{0, 9};
+    for (int trial = 0; trial < 50; ++trial) {
+        NavGrid grid{16, 16};
+        for (int y = 0; y < 16; ++y) {
+            for (int x = 0; x < 16; ++x) {
+                const int roll = terrain(rng);
+                grid.set_cost({x, y}, roll < 2 ? 0 : roll < 7 ? 1 : static_cast<std::uint8_t>(roll - 4));
+            }
+        }
+        const Cell goal{coord(rng), coord(rng)};
+        grid.set_cost(goal, 1);
+        const std::vector<Cell> goals{goal};
+        const auto field = FlowField::build(grid, goals);
+
+        for (int y = 0; y < 16; ++y) {
+            for (int x = 0; x < 16; ++x) {
+                const Cell start{x, y};
+                const auto path = find_path(grid, start, goal);
+                CHECK(field.reachable(start) == !path.empty());
+                if (path.empty()) {
+                    continue;
+                }
+                CHECK(field.distance(start) == Catch::Approx(path_cost(grid, path)).margin(1e-3));
+                // Walk the field: it must arrive, and its route costs the same.
+                std::vector<Cell> walked{start};
+                while (walked.size() <= 256 && walked.back() != goal) {
+                    const auto step = field.next(walked.back());
+                    REQUIRE(step.has_value());
+                    walked.push_back(*step);
+                }
+                CHECK(walked.back() == goal);
+                CHECK(path_cost(grid, walked) == Catch::Approx(path_cost(grid, path)).margin(1e-3));
+            }
+        }
+    }
+}
