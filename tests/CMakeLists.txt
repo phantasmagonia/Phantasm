@@ -15,6 +15,7 @@ add_executable(phantasm_tests
     iso_grid_tests.cpp
     log_tests.cpp
     offscreen_tests.cpp
+    pathfinding_tests.cpp
     sprite_batch_tests.cpp
     sort_key_tests.cpp
     task_pool_tests.cpp

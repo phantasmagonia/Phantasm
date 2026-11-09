@@ -10,6 +10,7 @@ add_library(phantasm
     src/image.cpp
     src/input.cpp
     src/log.cpp
+    src/pathfinding.cpp
     src/paths.cpp
     src/pixel_format.cpp
     src/renderer.cpp
