@@ -8,6 +8,7 @@ add_executable(phantasm_tests
     entity_store_tests.cpp
     fixed_step_tests.cpp
     frame_clock_tests.cpp
+    fog_tests.cpp
     frame_stats_tests.cpp
     geometry_tests.cpp
     input_tests.cpp

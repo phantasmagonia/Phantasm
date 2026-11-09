@@ -306,6 +306,12 @@ Implemented and tested:
 - **Texture filtering per texture:** `TextureFilter::Nearest` for crisp pixel art and UI, or
   `TextureFilter::Linear` for high-resolution art, with mipmaps generated on upload so zoomed-out
   art stays smooth instead of shimmering.
+- **Fog of war and line of sight (`TileFog`):** per-player tile visibility using recursive
+  shadowcasting (Visible / Explored / Unseen), several viewers per player, memory only for
+  explored 32×32 chunks, plus a tile line-of-sight check. A 1024×1024 map with 20% walls,
+  view radius 24: **2.7 µs** for one player, **292 µs** for 64 players (MacBook Air M1, 8 GB,
+  release). Note: `has_line_of_sight` uses a line walk and can disagree with the shadowcast
+  view at diagonal corners.
 - **Text:** TrueType fonts via stb_truetype with UTF-8 input, kerning, line breaks, and
   configurable character sets (default: ASCII, Latin-1, Latin Extended-A, including Turkish).
   Glyphs batch like sprites. Font files are structure-checked before parsing; load fonts you

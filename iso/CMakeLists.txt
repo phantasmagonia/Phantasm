@@ -1,5 +1,6 @@
 add_library(phantasm_iso
     src/iso_grid.cpp
+    src/fog.cpp
     src/scene.cpp
     src/scene_history.cpp
     src/tile_map.cpp
