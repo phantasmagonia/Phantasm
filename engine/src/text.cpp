@@ -201,6 +201,16 @@ bool FontFace::has_glyph(char32_t codepoint) const noexcept {
                        [codepoint](const Glyph& glyph) { return glyph.codepoint == codepoint; });
 }
 
+float FontFace::kerning(char32_t left, char32_t right) const noexcept {
+    if (!has_glyph(left) || !has_glyph(right)) {
+        return 0.0F;
+    }
+    const auto& font = *static_cast<const stbtt_fontinfo*>(font_info_.get());
+    return static_cast<float>(stbtt_GetGlyphKernAdvance(&font, find_glyph(left)->font_index,
+                                                        find_glyph(right)->font_index)) *
+           scale_;
+}
+
 const FontFace::Glyph* FontFace::find_glyph(char32_t codepoint) const noexcept {
     if (codepoint < kDirectLookup && direct_[codepoint] != kNoGlyph) {
         return &glyphs_[direct_[codepoint]];

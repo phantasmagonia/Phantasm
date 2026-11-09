@@ -47,6 +47,8 @@ public:
     [[nodiscard]] int atlas_height() const noexcept { return atlas_height_; }
     [[nodiscard]] std::span<const std::byte> atlas_pixels() const noexcept { return atlas_pixels_; }
     [[nodiscard]] bool has_glyph(char32_t codepoint) const noexcept;
+    // Horizontal adjustment between two baked characters, in pixels (0 if none).
+    [[nodiscard]] float kerning(char32_t left, char32_t right) const noexcept;
     [[nodiscard]] TextLayout layout(std::string_view text) const;
     [[nodiscard]] Vec2 measure(std::string_view text) const { return layout(text).size; }
 

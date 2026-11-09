@@ -124,8 +124,24 @@ TEST_CASE("Kerning pulls some letter pairs closer together") {
     }
     const FontFace face = FontFace::parse(*font, 64.0F);
 
-    // "AV" is the classic kerned pair; the pair is narrower than its letters measured apart.
-    CHECK(face.measure("AV").x < face.measure("A").x + face.measure("V").x);
+    // Layout applies exactly the font's kerning, whatever the installed font provides.
+    const float kerning = face.kerning(U'A', U'V');
+    CHECK(face.measure("AV").x ==
+          Catch::Approx(face.measure("A").x + face.measure("V").x + kerning).margin(0.01F));
+    if (kerning < 0.0F) {
+        // "AV" is the classic kerned pair: with kerning data, it is narrower than apart.
+        CHECK(face.measure("AV").x < face.measure("A").x + face.measure("V").x);
+    }
+}
+
+TEST_CASE("Kerning is zero for characters that are not baked") {
+    const auto font = system_font();
+    if (!font) {
+        SKIP("No system font found");
+    }
+    const FontFace face = FontFace::parse(*font, 64.0F, phantasm::FontOptions{.characters = U"A"});
+
+    CHECK(face.kerning(U'A', U'V') == 0.0F);
 }
 
 TEST_CASE("Turkish letters are in the default character set") {
